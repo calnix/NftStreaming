@@ -11,7 +11,6 @@
 - Admin can `(emergency) withdraw` $MOCA tokens from the token distributor contract
 - Admin can `withdraw unclaimed` $MOCA tokens from the token distributor contract `60 days` after end timestamp
 - Admin can `top up` $MOCA tokens to the token distributor contract
-- ~~Admin can change the `end timestamp` of the token distribution process (streaming) - this will affect the token distribution amount per second~~
 
 **Moca NFT Holder:**
 
