@@ -210,6 +210,7 @@ contract NftStreaming is Pausable, Ownable2Step {
         TOKEN.safeTransfer(msg.sender, totalAmount);      
     }
 
+/*
     // note: remove and update NftLocker.sol
     function claimLocked(uint256[] calldata tokenIds) external payable whenStartedAndBeforeDeadline whenNotPaused {
         
@@ -231,7 +232,7 @@ contract NftStreaming is Pausable, Ownable2Step {
 
 
     }
-
+*/
     // if nft is on some contract (e.g. staking pro)
     function claimViaModule(address module, uint256[] calldata tokenIds) external payable whenStartedAndBeforeDeadline whenNotPaused {
         if(module == address(0)) revert ZeroAddress();      // in-case someone fat-fingers and allows zero address in modules mapping
