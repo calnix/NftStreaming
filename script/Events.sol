@@ -16,6 +16,8 @@ event Withdrawn(address indexed operator, uint256 amount);
 
 event DeadlineUpdated(uint256 indexed newDeadline);
 
+event StreamsPaused(uint256[] indexed tokenIds);
+
 event Frozen(uint256 indexed timestamp);
 event EmergencyExit(address receiver, uint256 balance);
 

@@ -1,4 +1,18 @@
-## On-Chain Considerations
+## NFT Streaming
+
+NFT holders are beneficiaries of some token rewards that will be streamed to them over the course of a defined period.
+
+## Claiming of Streams
+
+Claim functions will be segregated as per NFT location. E.g.
+
+- claim: if NFT is held within wallet
+- claimDelegated: if NFTs are delegated
+- claimViaModule: if NFTs are on some other contract like staking pro
+
+User will call a different fn based on where his NFTs are located. All functions will allow for claiming of multiple NFTs at once.
+However, a user cannot claim across multiple venues at once.
+
 
 **Admin:**
 
@@ -26,5 +40,7 @@ Points to consider:
 - Limits on claiming from x NFTs (due to batching)???
 - Claiming from hot wallet, staking and delegation together??
 
+## Delegation of NFTs
 
-https://www.notion.so/animocabrands/Moca-NFT-Token-Vesting-f0dda74929c1438baa75c0e62ea5f9cd?pvs=4
+- We expect users are delegating via the function: `delegateAll(hotWallet, bytes32(0), true)`
+- Therefore frm the contract perspective we'll just check via `checkDelegateForERC721(hw1, cw, nftAddress, tokenId, "")`

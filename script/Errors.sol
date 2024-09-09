@@ -12,12 +12,15 @@ error DeadlineExceeded();
 error InvalidOwner();
 error IncorrectClaimable();
 error EmptyArray();
+error StreamPaused();
 
 error OnlyDepositor();
 error ExcessDeposit();
 error WithdrawDisabled();
 error PrematureWithdrawal();
 error InvalidNewDeadline();
+
+error UnregisteredModule();
 
 error IsFrozen();
 error NotFrozen();

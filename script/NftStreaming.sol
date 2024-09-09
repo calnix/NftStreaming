@@ -58,50 +58,18 @@ contract NftStreaming is Pausable, Ownable2Step {
      * @dev Because the claimed amount and lastTimestamp are often read together, declaring them in the same slot saves gas.
      * @param claimed The cumulative amount withdrawn from the stream.
      * @param lastClaimedTimestamp Last claim time
-     * @param refunded The amount refunded to the sender. Unless the stream was canceLled, this is always zero.   
+     * @param isPaused Is the stream paused 
      */
     struct Stream {
         // slot0
         uint128 claimed;
         uint128 lastClaimedTimestamp;
         // slot 1
-        uint128 refunded;
-        bool wasCanceled;
+        bool isPaused;
     }
 
     mapping(uint256 tokenId => Stream stream) public streams;
-    mapping(address module => bool isRegistered) public modules;    // Trusted contracts to call anything on
-
-    /**
-     * @notice Struct encapsulating the claimed and refunded amounts, all denoted in units of the asset's decimals.
-     * @dev Because the deposited and the withdrawn amount are often read together, declaring them in the same slot saves gas.
-     * @param claimed The cumulative amount withdrawn from the stream.
-     * @param refunded The amount refunded to the sender. Unless the stream was canceled, this is always zero.   
-     */
-    struct Amounts {
-        // slot 0
-        uint128 claimed;
-        uint128 refunded;
-        // slot 1
-        // bool isCancelable;
-        // bool wasCanceled;
-    }
-
-    /**
-     * @notice Enum representing the different statuses of a stream.
-     * @custom:value0 PENDING Stream created but not started; assets are in a pending state.
-     * @custom:value1 STREAMING Active stream where assets are currently being streamed.
-     * @custom:value2 SETTLED All assets have been streamed; recipient is due to withdraw them.
-     * @custom:value3 CANCELED Canceled stream; remaining assets await recipient's withdrawal.
-     * @custom:value4 DEPLETED Depleted stream; all assets have been withdrawn and/or refunded.
-    */ 
-    enum Status {
-        PENDING,
-        STREAMING,
-        SETTLED,
-        CANCELED,
-        DEPLETED
-    }
+    mapping(address module => bool isRegistered) public modules;    // Trusted contracts to call
 
     constructor(
         address nft, address token, address owner, address depositor_, address delegateRegistry,
@@ -137,7 +105,7 @@ contract NftStreaming is Pausable, Ownable2Step {
     //////////////////////////////////////////////////////////////*/
 
     // if nft in wallet
-    function claimSingle(uint256 tokenId) external payable {
+    function claimSingle(uint256 tokenId) external payable whenStartedAndBeforeDeadline whenNotPaused {
         if(block.timestamp < startTime) revert NotStarted();
 
         // check that deadline as not been exceeded; if deadline has been defined
@@ -160,33 +128,41 @@ contract NftStreaming is Pausable, Ownable2Step {
         TOKEN.safeTransfer(msg.sender, claimable);        
     }
 
-    function claimMultiple(uint256[] calldata tokenIds) external payable whenStartedAndNotEnded {
+//--------------
+
+    function claim(uint256[] calldata tokenIds) external payable whenStartedAndBeforeDeadline whenNotPaused {
         
         // array validation
         uint256 tokenIdsLength = tokenIds.length;
         if(tokenIdsLength == 0) revert EmptyArray(); 
 
-        uint128 totalAmount;
-        for(uint256 i = 0; i < tokenIdsLength; ++i) {
+
+        uint256 totalAmount;
+        uint256[] memory amounts = new uint256[](tokenIdsLength);
+        for (uint256 i = 0; i < tokenIdsLength; ++i) {
+
+            uint256 tokenId = tokenIds[i];
+
+            // validate ownership: msg.sender == ownerOf
+            address ownerOf = NFT.ownerOf(tokenId);
+            if(msg.sender != ownerOf) revert InvalidOwner();  
+
+            // update claims
+            uint256 claimable = _updateLastClaimed(tokenId);
+            
+            amounts[i] = claimable;
+            totalAmount += claimable;
         }
 
+        // claimed per tokenId
+        emit Claimed(msg.sender, tokenIds, amounts);
+ 
+        // transfer all
+        TOKEN.safeTransfer(msg.sender, totalAmount);      
     }
-
-
-    function claimDelegatedAndWallet(uint256[] calldata tokenIdsInWallet, uint256[] calldata tokenIdsDelegated) external payable whenStartedAndNotEnded whenNotPaused {
-
-        // array validation
-        uint256 tokenIdsLength = tokenIds.length;
-        if(tokenIdsLength == 0) revert EmptyArray(); 
-
-
-
-    }
-
-//--------------
 
     // if nft in wallet or delegated
-    function claimDelegated(uint256[] calldata tokenIds) external payable whenStartedAndNotEnded whenNotPaused {
+    function claimDelegated(uint256[] calldata tokenIds) external payable whenStartedAndBeforeDeadline whenNotPaused {
         
         // array validation
         uint256 tokenIdsLength = tokenIds.length;
@@ -228,7 +204,7 @@ contract NftStreaming is Pausable, Ownable2Step {
     }
 
 
-    function claimViaModule(address module, bytes calldata data, uint256[] calldata tokenIds) external payable whenStartedAndNotEnded whenNotPaused {
+    function claimViaModule(address module, bytes calldata data, uint256[] calldata tokenIds) external payable whenStartedAndBeforeDeadline whenNotPaused {
         
         // array validation
         uint256 tokenIdsLength = tokenIds.length;
@@ -248,6 +224,8 @@ contract NftStreaming is Pausable, Ownable2Step {
         uint256[] memory amounts = new uint256[](tokenIdsLength);
         
         for (uint256 i = 0; i < tokenIdsLength; ++i) {
+
+                uint256 tokenId = tokenIds[i];
                 uint256 claimable = _updateLastClaimed(tokenId);
                 
                 totalAmount += claimable;
@@ -271,18 +249,14 @@ contract NftStreaming is Pausable, Ownable2Step {
         // get data
         Stream memory stream = streams[tokenId];
 
-        // stream updated: return
-        if(stream.lastClaimedTimestamp == block.timestamp) { 
-            return(0);
-        }
+        // stream previously updated: return
+        if(stream.lastClaimedTimestamp == block.timestamp) return(0);
 
         // stream ended: return
-        if(stream.lastClaimedTimestamp == endTime) { 
-            return(0);
-        }
+        if(stream.lastClaimedTimestamp == endTime) return(0);
 
-        //note: cancelled/paused
-        //if(claim.wasCancelled)
+        //note: paused
+        if(stream.isPaused) revert StreamPaused();
 
         //calc claimable
         (uint256 claimable, uint256 currentTimestamp) = _calculateClaimable(stream.lastClaimedTimestamp);
@@ -294,7 +268,7 @@ contract NftStreaming is Pausable, Ownable2Step {
         stream.lastClaimedTimestamp = uint128(currentTimestamp);
         stream.claimed += uint128(claimable);
 
-        // storage
+        // update storage
         streams[tokenId] = stream;
 
         return claimable;
@@ -302,7 +276,7 @@ contract NftStreaming is Pausable, Ownable2Step {
 
     function _calculateClaimable(uint128 lastClaimedTimestamp) internal view returns(uint256, uint256) {
         
-        // currentTimestamp <= endTime
+        // startTime <= currentTimestamp <= endTime
         uint256 currentTimestamp = block.timestamp > endTime ? endTime : block.timestamp;
         
         uint256 timeDelta = currentTimestamp - lastClaimedTimestamp;
@@ -342,14 +316,6 @@ contract NftStreaming is Pausable, Ownable2Step {
         emit DepositorUpdated(oldDepositor, newDepositor);
     }
 
-    function updateHelper(address newHelper) external payable onlyOwner {
-        address(HELPER) = oldHelper;
-
-        HELPER = IHelper(newHelper);
-
-        emit HelperUpdated(oldHelper, newHelper);        
-    }
-
     /**
      * @notice
      * @dev Add or remove a module
@@ -359,6 +325,24 @@ contract NftStreaming is Pausable, Ownable2Step {
         modules[module] = set;
 
         emit ModuleUpdated(module, set);
+    }
+
+    function pauseStreams(uint256[] calldata tokenIds) external onlyOwner {
+        
+        // array validation
+        uint256 tokenIdsLength = tokenIds.length;
+        if(tokenIdsLength == 0) revert EmptyArray(); 
+
+        // pause streams
+        for (uint256 i = 0; i < tokenIdsLength; ++i) {
+
+            uint256 tokenId = tokenIds[i];
+
+            Stream memory stream = streams[tokenId];
+            stream.isPaused = true;
+        }
+
+        emit StreamsPaused(tokenIds);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -466,7 +450,7 @@ contract NftStreaming is Pausable, Ownable2Step {
     //////////////////////////////////////////////////////////////*/
 
 
-    modifier whenStartedAndNotEnded() {
+    modifier whenStartedAndBeforeDeadline() {
 
         if(block.timestamp < startTime) revert NotStarted();
 
