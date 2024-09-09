@@ -4,7 +4,12 @@ NFT holders are beneficiaries of some token rewards that will be streamed to the
 
 - Token and NFT addresses are to be defined.
 - Period is defined by startTime and endTime variables.
-- NFTs can be delegated via https://delegate.xyz 
+- NFTs can be delegated via https://delegate.xyz
+
+## Delegation of NFTs
+
+- Expect users to be delegating via the function: `delegateAll(hotWallet, bytes32(0), true)`
+- Hence, the delegation check is done via: `checkDelegateForERC721(hw1, cw, nftAddress, tokenId, "")`
 
 ## Roles
 
@@ -84,37 +89,23 @@ Only the contract can change this depositor address; if needed.
 - pause: pause contract; all claims paused
 - unpause: unpause contract
 
-> Add operator role? 
 
-## Emergency 
+### updateDeadline
 
-**Admin:**
+The deadline variable can only be minimally a value 14 days past the defined endTime.
 
-*(pause → freeze → emergency withdraw)*
+```solidity
+        if (newDeadline < endTime + 14 days) revert InvalidNewDeadline();
+```
 
-- Admin can `pause` the token claims
-    - *Implies that it can be unpaused and everything continue normally*
-- Admin can `freeze` the token contract
-    - *Implies a one-way action - cannot be reversed*
-- Admin can `(emergency) withdraw` $MOCA tokens from the token distributor contract
-- Admin can `withdraw unclaimed` $MOCA tokens from the token distributor contract `60 days` after end timestamp
-- Admin can `top up` $MOCA tokens to the token distributor contract
+> Add operator role for some functions?
 
-**Moca NFT Holder:**
+## Emergency
 
-- Ability to claim vested $MOCA against Moca NFTs that are staked in Staking Pro
-- Ability to claim vested $MOCA from `single NFT / multiple NFTs / All NFTs` in a single transaction
-    - Claim based on where the NFT is residing (staking OR hot wallet)
-- Ability to claim vested $MOCA using delegated wallets
-    - *delegate.xyz*
-- Vested tokens will be streamed every second and available for claiming
+1. Pause and ascertain situation
+2. If contract proved to be vulnerable, freeze it.
+3. Owner to call `emergencyExit`
 
-Points to consider:
+Owner can set a target address to receive the emergency withdrawal of tokens.
 
-- Limits on claiming from x NFTs (due to batching)???
-- Claiming from hot wallet, staking and delegation together??
-
-## Delegation of NFTs
-
-- Expect users to be delegating via the function: `delegateAll(hotWallet, bytes32(0), true)`
-- Hence, the delegation check is done via: `checkDelegateForERC721(hw1, cw, nftAddress, tokenId, "")`
+Withdrawal amount is reference via token contract's balanceOf method as we cannot be sure if `totalDeposited` and `totalClaimed` remain accurate at such a time.
