@@ -20,7 +20,9 @@ error WithdrawDisabled();
 error PrematureWithdrawal();
 error InvalidNewDeadline();
 
+error ZeroAddress();
 error UnregisteredModule();
+error ModuleCheckFailed();
 
 error IsFrozen();
 error NotFrozen();

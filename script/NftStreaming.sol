@@ -7,16 +7,16 @@ import {SafeERC20, IERC20} from "./../lib/openzeppelin-contracts/contracts/token
 import {Ownable2Step, Ownable} from "openzeppelin-contracts/contracts/access/Ownable2Step.sol";
 import {Pausable} from "openzeppelin-contracts/contracts/utils/Pausable.sol";
 
+import {IDelegateRegistry} from "./IDelegateRegistry.sol";
+
 import "./Events.sol";
 import "./Errors.sol";
-import {IDelegateRegistry} from "./IDelegateRegistry.sol";
-import {IHelper} from "./IHelper.sol";
 
 /**
- * @title MocaStreaming
+ * @title NftStreaming
  * @custom:version 1.0
  * @custom:author Calnix(@cal_nix)
- * @notice Contract to stream token rewards to Moca NFT holders 
+ * @notice Contract to stream token rewards to NFT holders 
  */
 
 contract NftStreaming is Pausable, Ownable2Step {
@@ -104,7 +104,7 @@ contract NftStreaming is Pausable, Ownable2Step {
                                  USERS
     //////////////////////////////////////////////////////////////*/
 
-    // if nft in wallet
+    // note: for deletion
     function claimSingle(uint256 tokenId) external payable whenStartedAndBeforeDeadline whenNotPaused {
         if(block.timestamp < startTime) revert NotStarted();
 
@@ -130,6 +130,7 @@ contract NftStreaming is Pausable, Ownable2Step {
 
 //--------------
 
+    // if nft in wallet
     function claim(uint256[] calldata tokenIds) external payable whenStartedAndBeforeDeadline whenNotPaused {
         
         // array validation
@@ -153,6 +154,9 @@ contract NftStreaming is Pausable, Ownable2Step {
             amounts[i] = claimable;
             totalAmount += claimable;
         }
+        
+        // update totalClaimed
+        totalClaimed += totalAmount;
 
         // claimed per tokenId
         emit Claimed(msg.sender, tokenIds, amounts);
@@ -161,7 +165,7 @@ contract NftStreaming is Pausable, Ownable2Step {
         TOKEN.safeTransfer(msg.sender, totalAmount);      
     }
 
-    // if nft in wallet or delegated
+    // if nft is delegated
     function claimDelegated(uint256[] calldata tokenIds) external payable whenStartedAndBeforeDeadline whenNotPaused {
         
         // array validation
@@ -196,6 +200,9 @@ contract NftStreaming is Pausable, Ownable2Step {
             amounts[i] = claimable;
         }
         
+        // update totalClaimed
+        totalClaimed += totalAmount;
+
         // claimed per tokenId
         emit Claimed(msg.sender, tokenIds, amounts);
  
@@ -203,9 +210,32 @@ contract NftStreaming is Pausable, Ownable2Step {
         TOKEN.safeTransfer(msg.sender, totalAmount);      
     }
 
-
-    function claimViaModule(address module, bytes calldata data, uint256[] calldata tokenIds) external payable whenStartedAndBeforeDeadline whenNotPaused {
+    // note: remove and update NftLocker.sol
+    function claimLocked(uint256[] calldata tokenIds) external payable whenStartedAndBeforeDeadline whenNotPaused {
         
+        // array validation
+        uint256 tokenIdsLength = tokenIds.length;
+        if(tokenIdsLength == 0) revert EmptyArray(); 
+
+        // check if locked by msg.sender
+        for (uint256 i = 0; i < tokenIdsLength; ++i) {
+
+            uint256 tokenId = tokenIds[i];
+
+            // note: modify NftLocker - add a view function that takes in `uint256[] tokenIds` as param
+            // view function will verify ownership
+            // save on x-contract calls
+            // if(locker.nfts(tokenId) != msg.sender) revert InvalidOwner(); 
+        }
+
+
+
+    }
+
+    // if nft is on some contract (e.g. staking pro)
+    function claimViaModule(address module, uint256[] calldata tokenIds) external payable whenStartedAndBeforeDeadline whenNotPaused {
+        if(module == address(0)) revert ZeroAddress();      // in-case someone fat-fingers and allows zero address in modules mapping
+
         // array validation
         uint256 tokenIdsLength = tokenIds.length;
         if(tokenIdsLength == 0) revert EmptyArray(); 
@@ -214,11 +244,12 @@ contract NftStreaming is Pausable, Ownable2Step {
         if(!modules[module]) revert UnregisteredModule(); 
 
         // check ownership via moduleCall
-        // data: abi.encodeWithSignature("isOwnerOf(uint256[])", tokenIds)
-        // if not owner, call should revert
-        (bool success, bytes memory result) = module.staticcall(data);
-        require(success);
-        
+        bytes memory data = abi.encodeWithSignature("streamingOwnerCheck(address,uint256[])", msg.sender, tokenIds);
+        (bool success, /*bytes memory result*/) = module.staticcall(data);
+
+        // if not msg.sender is not owner, execution expected to revert within module;
+        // success == false
+        if(!success) revert ModuleCheckFailed();       
 
         uint256 totalAmount;
         uint256[] memory amounts = new uint256[](tokenIdsLength);
@@ -231,6 +262,9 @@ contract NftStreaming is Pausable, Ownable2Step {
                 totalAmount += claimable;
                 amounts[i] = claimable;
         }
+
+        // update totalClaimed
+        totalClaimed += totalAmount;
 
         // claimed per tokenId
         emit Claimed(msg.sender, tokenIds, amounts);
@@ -350,24 +384,25 @@ contract NftStreaming is Pausable, Ownable2Step {
     //////////////////////////////////////////////////////////////*/
 
     /**
-     * @notice Depositor to deposit the total tokens required
+     * @notice Depositor to deposit the tokens required for streaming
      * @dev Depositor can fund in totality at once or incrementally, 
-            so to avoid having to commit a large initial sum
+            to avoid having to commit a large initial sum
      * @param amount Amount to deposit
      */
     function deposit(uint256 amount) external {
         if(msg.sender != depositor) revert OnlyDepositor(); 
 
-        // surplus check?
+        // surplus check
         if(totalAllocation > (totalDeposited + amount)) revert ExcessDeposit(); 
 
-        emit Deposited(msg.sender);
+        emit Deposited(msg.sender, amount);
+
         TOKEN.safeTransferFrom(msg.sender, address(this), amount);
     }
 
 
     /**
-     * @notice Operator to withdraw all unclaimed tokens past the specified deadline
+     * @notice Depositor to withdraw all unclaimed tokens past the specified deadline
      * @dev Only possible if deadline has been defined and exceeded
      */
     function withdraw() external {

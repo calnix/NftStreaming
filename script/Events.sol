@@ -7,7 +7,7 @@ event Claimed(address indexed user, uint256[] tokenIds, uint256[] amounts);
 
 event ClaimedMultiple(address indexed user, uint128[] rounds, uint128 totalAmount);
 
-event Deposited(address indexed operator);
+event Deposited(address indexed operator, uint256 amount);
 event DepositorUpdated(address indexed oldDepositor, address indexed newDepositor);
 
 event ModuleUpdated(address indexed module, bool set);
