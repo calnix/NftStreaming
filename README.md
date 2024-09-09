@@ -1,66 +1,31 @@
-## Foundry
+## On-Chain Considerations
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+**Admin:**
 
-Foundry consists of:
+*(pause → freeze → emergency withdraw)*
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+- Admin can `pause` the token claims
+    - *Implies that it can be unpaused and everything continue normally*
+- Admin can `freeze` the token contract
+    - *Implies a one-way action - cannot be reversed*
+- Admin can `(emergency) withdraw` $MOCA tokens from the token distributor contract
+- Admin can `withdraw unclaimed` $MOCA tokens from the token distributor contract `60 days` after end timestamp
+- Admin can `top up` $MOCA tokens to the token distributor contract
+- ~~Admin can change the `end timestamp` of the token distribution process (streaming) - this will affect the token distribution amount per second~~
 
-## Documentation
+**Moca NFT Holder:**
 
-https://book.getfoundry.sh/
+- Ability to claim vested $MOCA against Moca NFTs that are staked in Staking Pro
+- Ability to claim vested $MOCA from `single NFT / multiple NFTs / All NFTs` in a single transaction
+    - Claim based on where the NFT is residing (staking OR hot wallet)
+- Ability to claim vested $MOCA using delegated wallets
+    - *delegate.xyz*
+- Vested tokens will be streamed every second and available for claiming
 
-## Usage
+Points to consider:
 
-### Build
+- Limits on claiming from x NFTs (due to batching)???
+- Claiming from hot wallet, staking and delegation together??
 
-```shell
-$ forge build
-```
 
-### Test
-
-```shell
-$ forge test
-```
-
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+https://www.notion.so/animocabrands/Moca-NFT-Token-Vesting-f0dda74929c1438baa75c0e62ea5f9cd?pvs=4
