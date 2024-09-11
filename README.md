@@ -6,6 +6,8 @@ NFT holders are beneficiaries of some token rewards that will be streamed to the
 - Period is defined by startTime and endTime variables.
 - NFTs can be delegated via https://delegate.xyz
 
+All NFTs get the same amount streamed.
+
 ## Delegation of NFTs
 
 - Expect users to be delegating via the function: `delegateAll(hotWallet, bytes32(0), true)`
@@ -21,12 +23,14 @@ NFT holders are beneficiaries of some token rewards that will be streamed to the
 
 Claim functions will be segregated as per NFT location. E.g.:
 
-- claim: if NFTs are held by calling EOA (i.e. msg.sender)
-- claimDelegated: if NFTs are delegated
-- claimViaModule: if NFTs are on some other contract like staking pro
+- `claim`: if NFTs are held by calling EOA (i.e. msg.sender)
+- `claimSingle`: if msg.sender has only 1 NFT
+- `claimDelegated`: if NFTs are delegated
+- `claimViaModule`: if NFTs are on some other contract like staking pro
 
-User will call a different fn based on where his NFTs are located. All functions will allow for claiming on multiple NFTs at once.
-However, a user cannot claim across multiple venues at once.
+User will call a different fn based on where his NFTs are located. All functions will allow for claiming on multiple NFTs at once. However, a user cannot claim across multiple venues at once.
+
+All the claims are multiple claims except for the `claimSingle`; which is offered as ~50% of user base have 1 NFT.
 
 ### Pausing a stream
 

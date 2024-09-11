@@ -88,7 +88,7 @@ contract NftStreaming is Pausable, Ownable2Step {
         if(allocationPerNft_ == 0) revert InvalidAllocation();
 
         // calculate emissionPerSecond
-        uint256 period = endTime - startTime; 
+        uint256 period = endTime_ - startTime_; 
         emissionPerSecond = allocationPerNft_ / period;
         if(emissionPerSecond == 0) revert InvalidEmission();
 
@@ -118,7 +118,6 @@ contract NftStreaming is Pausable, Ownable2Step {
         // validate ownership
         address ownerOf = NFT.ownerOf(tokenId);
         if(msg.sender != ownerOf) revert InvalidOwner();  
-        //         if (msg.sender == nftOwner || DELEGATE_REGISTRY.checkDelegateForERC721(msg.sender, nftOwner, address(NFT), tokenId, "")) {
         
         uint256 claimable = _updateLastClaimed(tokenId);
         
@@ -172,16 +171,20 @@ contract NftStreaming is Pausable, Ownable2Step {
         uint256 tokenIdsLength = tokenIds.length;
         if(tokenIdsLength == 0) revert EmptyArray(); 
 
-        // check delegation 
+        // check delegation on msg.sender
         bytes[] memory data = new bytes[](tokenIdsLength);
+        address[] memory owners = new address[](tokenIdsLength);
         for (uint256 i = 0; i < tokenIdsLength; ++i) {
             
-            // get nft Owner
             uint256 tokenId = tokenIds[i];
-            address nftOwner = NFT.ownerOf(tokenId);          
 
-            data[i] = abi.encodeWithSignature("delegateERC721(address,address,uint256,bytes32,bool)", 
-                        msg.sender, nftOwner, address(NFT), tokenId, "");
+            // get and store nft Owner
+            address nftOwner = NFT.ownerOf(tokenId);          
+            owners[i] = nftOwner;
+
+            // data for multicall
+            data[i] = abi.encodeCall(DELEGATE_REGISTRY.checkDelegateForERC721, 
+                        (msg.sender, nftOwner, address(NFT), tokenId, ""));
         }
 
         // if a tokenId is not delegated will revert with: MulticallFailed()
@@ -204,10 +207,17 @@ contract NftStreaming is Pausable, Ownable2Step {
         totalClaimed += totalAmount;
 
         // claimed per tokenId
-        emit Claimed(msg.sender, tokenIds, amounts);
+        emit Claimed(msg.sender, owners, tokenIds, amounts);
  
         // transfer 
-        TOKEN.safeTransfer(msg.sender, totalAmount);      
+        for (uint256 i = 0; i < tokenIdsLength; ++i) {
+            
+            address owner = owners[i];    
+            uint256 amount = amounts[i];
+
+            TOKEN.safeTransfer(owner, amount);      
+        }
+
     }
 
 /*
@@ -395,6 +405,8 @@ contract NftStreaming is Pausable, Ownable2Step {
 
         // surplus check
         if(totalAllocation > (totalDeposited + amount)) revert ExcessDeposit(); 
+
+        totalDeposited += amount;
 
         emit Deposited(msg.sender, amount);
 
