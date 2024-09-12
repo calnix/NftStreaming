@@ -51,7 +51,6 @@ contract NftStreaming is Pausable, Ownable2Step {
 
     // emergency state: 1 is Frozed. 0 is not.
     uint256 public isFrozen;
-    uint256 public setupComplete;
 
     /**
      * @notice Struct encapsulating the claimed and refunded amounts, all denoted in units of the asset's decimals.
