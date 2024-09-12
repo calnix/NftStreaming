@@ -4,6 +4,8 @@ pragma solidity ^0.8.13;
 import { Test, console2, stdStorage, StdStorage } from "forge-std/Test.sol";
 
 import {NftStreaming} from "./../src/NftStreaming.sol";
+import "./../src/Errors.sol";
+import "./../src/Events.sol";
 
 import {Pausable} from "openzeppelin-contracts/contracts/utils/Pausable.sol";
 import {ERC20Mock} from "openzeppelin-contracts/contracts/mocks/token/ERC20Mock.sol";
@@ -47,10 +49,10 @@ abstract contract StateDeploy is Test {
         depositor = makeAddr("depositor");
 
         // stream params
-        startTime = 1;
-        endTime = 500;
+        startTime = 2;
+        endTime = 7;
         allocationPerNft = 10 ether;
-        totalAllocation = 10 ether * 3;
+        totalAllocation = 10 ether * 4;
 
         // contracts
         vm.startPrank(owner);
@@ -62,6 +64,12 @@ abstract contract StateDeploy is Test {
                                     allocationPerNft, startTime, endTime);
 
         vm.stopPrank();
+
+        // mint nfts
+        nft.mint(userA, 0);
+        nft.mint(userB, 1);
+        nft.mint(userC, 2);
+        nft.mint(userC, 3);
       
         // mint tokens
         token.mint(depositor, totalAllocation);
@@ -74,7 +82,15 @@ abstract contract StateDeploy is Test {
 }
 
 //Note: t = 0
-contract StateDeployTest is StateDeploy{
+contract StateDeployTest is StateDeploy {
+
+    function testEmissionPerSecond() public {
+        
+        uint256 period = endTime - startTime; 
+        uint256 calculatedEPS = (allocationPerNft / period);
+
+        assertEq(calculatedEPS, streaming.emissionPerSecond());
+    }
 
     function testCanDeposit() public {
         vm.prank(depositor);
@@ -88,9 +104,51 @@ abstract contract StateDeposited is StateDeploy {
     function setUp() public override virtual {
         super.setUp();
 
+        // time
         vm.warp(1);
 
         vm.prank(depositor);
         streaming.deposit(totalAllocation);
+    }
+}
+
+contract StateDepositedTest is StateDeposited {
+
+    function testUserACannotClaim() public {
+
+        vm.expectRevert(abi.encodeWithSelector(NotStarted.selector));
+
+        vm.prank(userA);
+        streaming.claimSingle(0);     
+    }
+}
+
+
+//Note: t = 2
+abstract contract StateStreamingStarted is StateDeposited {
+
+    function setUp() public override virtual {
+        super.setUp(); 
+
+        // time
+        vm.warp(2);
+    }
+}
+
+contract StateStreamingStartedTest is StateStreamingStarted {
+
+    // nothing to claim
+    function testUserACanClaim() public {
+        vm.warp(2);
+
+        uint256 userATokenBalance_before = token.balanceOf(userA);
+
+        vm.prank(userA);
+        streaming.claimSingle(0);     
+
+        uint256 userATokenBalance_after = token.balanceOf(userA);
+        uint256 eps = streaming.emissionPerSecond();
+        
+        assertEq(userATokenBalance_before, userATokenBalance_after);
     }
 }

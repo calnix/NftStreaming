@@ -26,3 +26,4 @@ error ModuleCheckFailed();
 
 error IsFrozen();
 error NotFrozen();
+

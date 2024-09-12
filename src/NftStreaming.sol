@@ -38,7 +38,7 @@ contract NftStreaming is Pausable, Ownable2Step {
     
     // allocation
     uint256 public immutable allocationPerNft;
-    uint256 public immutable emissionPerSecond;
+    uint256 public immutable emissionPerSecond; // per NFT
     uint256 public immutable totalAllocation;
 
     // financing
@@ -300,7 +300,7 @@ contract NftStreaming is Pausable, Ownable2Step {
         // stream ended: return
         if(stream.lastClaimedTimestamp == endTime) return(0);
 
-        //note: paused
+        //note: check paused
         if(stream.isPaused) revert StreamPaused();
 
         //calc claimable
@@ -323,7 +323,9 @@ contract NftStreaming is Pausable, Ownable2Step {
         
         // startTime <= currentTimestamp <= endTime
         uint256 currentTimestamp = block.timestamp > endTime ? endTime : block.timestamp;
-        
+        uint256 lastClaimedTimestamp = lastClaimedTimestamp < startTime ? startTime : block.timestamp;
+
+
         uint256 timeDelta = currentTimestamp - lastClaimedTimestamp;
         uint256 claimable = emissionPerSecond * timeDelta;
 
@@ -404,7 +406,7 @@ contract NftStreaming is Pausable, Ownable2Step {
         if(msg.sender != depositor) revert OnlyDepositor(); 
 
         // surplus check
-        if(totalAllocation > (totalDeposited + amount)) revert ExcessDeposit(); 
+        if((totalDeposited + amount) > totalAllocation) revert ExcessDeposit(); 
 
         totalDeposited += amount;
 
