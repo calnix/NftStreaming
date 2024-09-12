@@ -4,7 +4,8 @@ pragma solidity 0.8.24;
 
 event Claimed(address indexed user, uint256 amount);
 event Claimed(address indexed user, uint256[] tokenIds, uint256[] amounts);
-event Claimed(address indexed delegate, address[] owners, uint256[] tokenIds, uint256[] amounts);
+event ClaimedByDelegate(address indexed delegate, address[] owners, uint256[] tokenIds, uint256[] amounts);
+event ClaimedByModule(address indexed module, uint256[] tokenIds, uint256[] amounts);
 
 event ClaimedMultiple(address indexed user, uint128[] rounds, uint128 totalAmount);
 

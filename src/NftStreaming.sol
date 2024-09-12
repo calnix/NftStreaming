@@ -104,7 +104,6 @@ contract NftStreaming is Pausable, Ownable2Step {
                                  USERS
     //////////////////////////////////////////////////////////////*/
 
-    // note: for deletion
     function claimSingle(uint256 tokenId) external payable whenStartedAndBeforeDeadline whenNotPaused {
         if(block.timestamp < startTime) revert NotStarted();
 
@@ -120,16 +119,17 @@ contract NftStreaming is Pausable, Ownable2Step {
         if(msg.sender != ownerOf) revert InvalidOwner();  
         
         uint256 claimable = _updateLastClaimed(tokenId);
-        
+
+        // update totalClaimed
+        totalClaimed += claimable;
+
         emit Claimed(msg.sender, claimable);
  
         //transfer 
         TOKEN.safeTransfer(msg.sender, claimable);        
     }
 
-//--------------
-
-    // if nft in wallet
+    // if nfts in wallet
     function claim(uint256[] calldata tokenIds) external payable whenStartedAndBeforeDeadline whenNotPaused {
         
         // array validation
@@ -207,7 +207,7 @@ contract NftStreaming is Pausable, Ownable2Step {
         totalClaimed += totalAmount;
 
         // claimed per tokenId
-        emit Claimed(msg.sender, owners, tokenIds, amounts);
+        emit ClaimedByDelegate(msg.sender, owners, tokenIds, amounts);
  
         // transfer 
         for (uint256 i = 0; i < tokenIdsLength; ++i) {
@@ -278,7 +278,7 @@ contract NftStreaming is Pausable, Ownable2Step {
         totalClaimed += totalAmount;
 
         // claimed per tokenId
-        emit Claimed(msg.sender, tokenIds, amounts);
+        emit ClaimedByModule(module, tokenIds, amounts);
 
         // transfer 
         TOKEN.safeTransfer(msg.sender, totalAmount);    
@@ -321,9 +321,10 @@ contract NftStreaming is Pausable, Ownable2Step {
 
     function _calculateClaimable(uint128 lastClaimedTimestamp) internal view returns(uint256, uint256) {
         
-        // startTime <= currentTimestamp <= endTime
+        // currentTimestamp <= endTime
         uint256 currentTimestamp = block.timestamp > endTime ? endTime : block.timestamp;
-        uint256 lastClaimedTimestamp = lastClaimedTimestamp < startTime ? startTime : block.timestamp;
+        // lastClaimedTimestamp >= startTime
+        uint256 lastClaimedTimestamp = lastClaimedTimestamp < startTime ? startTime : lastClaimedTimestamp;
 
 
         uint256 timeDelta = currentTimestamp - lastClaimedTimestamp;
@@ -502,7 +503,7 @@ contract NftStreaming is Pausable, Ownable2Step {
 
     modifier whenStartedAndBeforeDeadline() {
 
-        if(block.timestamp < startTime) revert NotStarted();
+        if(block.timestamp <= startTime) revert NotStarted();
 
         // check that deadline as not been exceeded; if deadline has been defined
         if(deadline > 0) {
