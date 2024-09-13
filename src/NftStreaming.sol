@@ -344,7 +344,9 @@ contract NftStreaming is Pausable, Ownable2Step {
     function updateDeadline(uint256 newDeadline) external payable onlyOwner {
 
         // allow for 14 days buffer: prevent malicious premature ending
-        if (newDeadline < endTime + 14 days) revert InvalidNewDeadline();
+        // if the newDeadline is in the past: can insta-withdraw w/o informing users
+        uint256 latestTime = block.timestamp > endTime ? block.timestamp : endTime;
+        if (newDeadline < (latestTime + 14 days)) revert InvalidNewDeadline();
 
         deadline = newDeadline;
         emit DeadlineUpdated(newDeadline);

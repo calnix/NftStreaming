@@ -5,3 +5,9 @@
 - userC claims multiple NFTS
     - start/midway
     - end 
+
+
+
+operator role
+- pause contract
+- pause specific stream

@@ -419,4 +419,54 @@ contract StateStreamEndedTest is StateStreamEnded {
         assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
     }
 
+    function testOwnerCannotSetInvdalidDeadline() public {   
+        // verify
+        assertEq(streaming.deadline(), 0);
+
+        uint256 newDeadline = (endTime + 1 days);
+
+    }
+
+    function testOwnerCanSetDeadline() public {
+
+        // verify
+        assertEq(streaming.deadline(), 0);
+
+        uint256 newDeadline = (endTime + 15 days);
+
+        // check events
+        vm.expectEmit(true, true, true, true);
+        emit DeadlineUpdated(newDeadline);
+
+        vm.prank(owner);
+        streaming.updateDeadline(newDeadline);
+
+        // verify
+        assertEq(streaming.deadline(), newDeadline);
+    }
+
+}
+
+
+//Note: t = 12
+abstract contract StateDeadline is StateStreamEnded {
+    
+    function setUp() public override virtual {
+        super.setUp(); 
+
+        vm.prank(owner);
+        streaming.updateDeadline(endTime + 15 days);
+
+        vm.warp((endTime + 16 days));
+    }
+}
+
+
+contract StateDeadlineTest is StateDeadline {
+
+    function testDepositorCanWithdraw() public {
+
+        vm.prank(depositor);
+        streaming.withdraw();
+    }
 }
