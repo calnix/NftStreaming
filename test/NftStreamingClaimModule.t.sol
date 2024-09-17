@@ -12,6 +12,7 @@ import {Pausable} from "openzeppelin-contracts/contracts/utils/Pausable.sol";
 import {ERC20Mock} from "openzeppelin-contracts/contracts/mocks/token/ERC20Mock.sol";
 
 import "./MockNFT.sol";
+import "./MockModuleContract.sol";
 
 abstract contract StateDeploy is Test {    
     using stdStorage for StdStorage;
@@ -19,6 +20,8 @@ abstract contract StateDeploy is Test {
     NftStreaming public streaming;
     ERC20Mock public token;
     MockNFT public nft;
+
+    MockModuleContract public mockModule;
 
     // entities
     address public userA;
@@ -67,6 +70,8 @@ abstract contract StateDeploy is Test {
         streaming = new NftStreaming(address(nft), address(token), owner, depositor, address(0), 
                                     allocationPerNft, startTime, endTime);
 
+        mockModule = new MockModuleContract(address(nft));
+
         vm.stopPrank();
 
         // mint nfts
@@ -81,6 +86,12 @@ abstract contract StateDeploy is Test {
         // allowances
         vm.prank(depositor);
         token.approve(address(streaming), totalAllocation);
+
+        vm.prank(userB);
+        nft.setApprovalForAll(address(mockModule), true);
+
+        vm.prank(userC);
+        nft.setApprovalForAll(address(mockModule), true);
 
     }
 }
@@ -125,14 +136,34 @@ contract StateDepositedTest is StateDeposited {
         vm.prank(userA);
         streaming.claimSingle(0);     
     }
+
+    function testOwnerCanSetModule() public {
+
+        assertEq(streaming.modules(address(mockModule)), false);
+
+        // check events
+        vm.expectEmit(true, true, true, true);
+        emit ModuleUpdated(address(mockModule), true);
+
+        vm.prank(owner);
+        streaming.updateModule(address(mockModule), true);
+
+        assertEq(streaming.modules(address(mockModule)), true);
+    }
 }
 
-
 //Note: t = 2
+// module enabled
 abstract contract StateStreamingStarted is StateDeposited {
 
     function setUp() public override virtual {
         super.setUp(); 
+
+        // ----- moduble enabled
+        vm.prank(owner);
+        streaming.updateModule(address(mockModule), true);
+        assertEq(streaming.modules(address(mockModule)), true);
+        //  --------------------------------------------------
 
         // time
         vm.warp(2);
@@ -151,7 +182,6 @@ contract StateStreamingStartedTest is StateStreamingStarted {
 
 }
 
-
 //Note: t = 3
 // users can call claim; 1 second of emissions claimable
 abstract contract StateT03 is StateStreamingStarted {
@@ -159,10 +189,17 @@ abstract contract StateT03 is StateStreamingStarted {
     function setUp() public override virtual {
         super.setUp(); 
 
+        //---- userB locks nft on module contract
+        vm.prank(userB);
+            uint256[] memory tokenIds = new uint256[](1);
+            tokenIds[0] = 1;
+        mockModule.lock(tokenIds);
+
         // time
         vm.warp(3);
     }
 }
+
 
 contract StateT03Test is StateT03 {
 
@@ -255,10 +292,19 @@ abstract contract StateT05 is StateT03 {
         // record: 1 unit of eps claimed by each nft
         totalClaimed += 3 * streaming.emissionPerSecond();
 
+        //------ userC locks an nft on a module contract
+        vm.prank(userC);
+
+            uint256[] memory userCtokenId = new uint256[](1);
+            userCtokenId[0] = 3;
+
+        mockModule.lock(userCtokenId);
+        // ----------------------------------------------
+
         // time
         vm.warp(5);
-    }
-}  
+    }  
+} 
 
 contract StateT05Test is StateT05 {
 
@@ -290,12 +336,11 @@ contract StateT05Test is StateT05 {
 
     function testUserCCanClaimMultiple_T05() public {
 
-        uint256[] memory tokenIds = new uint256[](2);
+        uint256[] memory tokenIds = new uint256[](1);
             tokenIds[0] = 2;
-            tokenIds[1] = 3;
-        uint256[] memory amounts = new uint256[](2);
+
+        uint256[] memory amounts = new uint256[](1);
             amounts[0] = 2 * streaming.emissionPerSecond();
-            amounts[1] = 2 * streaming.emissionPerSecond();
 
         // before
         uint256 userCTokenBalance_before = token.balanceOf(userC);
@@ -308,7 +353,51 @@ contract StateT05Test is StateT05 {
         streaming.claim(tokenIds);     
 
         uint256 userCTokenBalance_after = token.balanceOf(userC);
-        uint256 epsClaimable = (2 * streaming.emissionPerSecond()) * 2;   // 2 nfts
+        uint256 epsClaimable = amounts[0];   // 1 nfts
+
+        // check tokens transfers
+        assertEq(token.balanceOf(address(streaming)), totalAllocation - totalClaimed - epsClaimable);
+        assertEq(userCTokenBalance_before + epsClaimable, userCTokenBalance_after);
+
+        // check streaming contract: tokenIds
+        for (uint256 i = tokenIds[0]; i < tokenIds.length; ++i) {
+
+            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
+
+            assertEq(claimed, epsClaimable/tokenIds.length);
+            assertEq(lastClaimedTimestamp, block.timestamp);
+        }
+
+        // check streaming contract: storage variables
+        assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
+    }
+
+
+    function testUserCCanClaimViaModule_T05() public {
+        
+        // verify userC's nft on module contract
+        assertEq(nft.ownerOf(3), address(mockModule));
+        assertEq(mockModule.nfts(3), userC);
+        assertEq(streaming.modules(address(mockModule)), true);
+
+        uint256[] memory tokenIds = new uint256[](1);
+            tokenIds[0] = 3;
+
+        uint256[] memory amounts = new uint256[](1);
+            amounts[0] = 2 * streaming.emissionPerSecond();
+
+        // before
+        uint256 userCTokenBalance_before = token.balanceOf(userC);
+
+        // check events
+        vm.expectEmit(true, true, true, true);
+        emit ClaimedByModule(address(mockModule), tokenIds, amounts);
+
+        vm.prank(userC);
+        streaming.claimViaModule(address(mockModule), tokenIds);
+
+        uint256 userCTokenBalance_after = token.balanceOf(userC);
+        uint256 epsClaimable = amounts[0];   // 1 nfts
 
         // check tokens transfers
         assertEq(token.balanceOf(address(streaming)), totalAllocation - totalClaimed - epsClaimable);
@@ -328,7 +417,6 @@ contract StateT05Test is StateT05 {
     }
 }
 
-
 //Note: t = 12
 abstract contract StateStreamEnded is StateT05 {
 
@@ -340,14 +428,24 @@ abstract contract StateStreamEnded is StateT05 {
         streaming.claimSingle(0);  
 
         // userC claimed: t3 - t5 -> 2s * 2eps = 4 units
-        vm.prank(userC);
-            uint256[] memory tokenIds = new uint256[](2);
-            tokenIds[0] = 2;
-            tokenIds[1] = 3;
-        streaming.claim(tokenIds);   
-        
+        vm.startPrank(userC);
+            // claim from streaming
+            uint256[] memory tokenIds_1 = new uint256[](1);
+            tokenIds_1[0] = 2;
+            streaming.claim(tokenIds_1);   
+
+            //claim via module
+            uint256[] memory tokenIds_2 = new uint256[](1);
+            tokenIds_2[0] = 3;
+            streaming.claimViaModule(address(mockModule), tokenIds_2);
+        vm.stopPrank();
+
         // record
         totalClaimed += 6 * streaming.emissionPerSecond();
+        
+        // unlock nft, return to owner
+        vm.prank(userC);
+        mockModule.unlock(tokenIds_2);
 
         // time
         vm.warp(12);
@@ -384,6 +482,10 @@ contract StateStreamEndedTest is StateStreamEnded {
     }
 
     function testUserCCanClaimMultiple_T12() public {
+        
+        // verify userC has both nfts
+        assertEq(nft.ownerOf(2), userC);
+        assertEq(nft.ownerOf(3), userC);
 
         uint256[] memory tokenIds = new uint256[](2);
             tokenIds[0] = 2;
@@ -422,387 +524,34 @@ contract StateStreamEndedTest is StateStreamEnded {
         assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
     }
 
-}
+    function testUserBCanClaim_T12() public {
+        // verify userB locked nft
+        assertEq(nft.ownerOf(1), address(mockModule));
 
-//Note: t = endTime + 2 days
-abstract contract StateStreamEndedPlusTwoDays is StateStreamEnded {
-    function setUp() public override virtual {
-        super.setUp(); 
+        uint256 tokenBalance_before = token.balanceOf(userB);
 
-        vm.warp((endTime + 2 days));
-    }
-}
+        vm.prank(userB);
+            uint256[] memory tokenIds = new uint256[](1);
+            tokenIds[0] = 1;
+            streaming.claimViaModule(address(mockModule), tokenIds);
 
-contract StateStreamEndedPlusTwoDaysTest is StateStreamEndedPlusTwoDays {
-    
-    function testUserACanClaim_AfterStreamEnded() public {
-
-        uint256 userATokenBalance_before = token.balanceOf(userA);
-
-        vm.prank(userA);
-        streaming.claimSingle(0);     
-
-        uint256 userATokenBalance_after = token.balanceOf(userA);
+        uint256 tokenBalance_after = token.balanceOf(userB);
         
         // eps
-        uint256 epsClaimable = 7 * streaming.emissionPerSecond();
+        uint256 epsClaimable = 10 * streaming.emissionPerSecond();
         
         // check tokens transfers
         assertEq(token.balanceOf(address(streaming)), (totalAllocation - totalClaimed - epsClaimable));
-        assertEq(userATokenBalance_before + epsClaimable, userATokenBalance_after);
+        assertEq(tokenBalance_before + epsClaimable, tokenBalance_after);
 
         // check streaming contract
-        (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(0);
-        assertEq(claimed, token.balanceOf(userA));
-        assertEq(lastClaimedTimestamp, streaming.endTime());
+        (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(1);
+        assertEq(claimed, token.balanceOf(userB));
+        assertEq(lastClaimedTimestamp, block.timestamp);
 
         // check streaming contract: storage variables
         assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
-    }
-
-    function testUserCCanClaimMultiple_AfterStreamEnded() public {
-
-        uint256[] memory tokenIds = new uint256[](2);
-            tokenIds[0] = 2;
-            tokenIds[1] = 3;
-        uint256[] memory amounts = new uint256[](2);
-            amounts[0] = 7 * streaming.emissionPerSecond();
-            amounts[1] = 7 * streaming.emissionPerSecond();
-
-        // before
-        uint256 userCTokenBalance_before = token.balanceOf(userC);
-
-        // check events
-        vm.expectEmit(true, true, true, true);
-        emit Claimed(userC, tokenIds, amounts);
-
-        vm.prank(userC);
-        streaming.claim(tokenIds);     
-
-        uint256 userCTokenBalance_after = token.balanceOf(userC);
-        uint256 epsClaimable = (7 * streaming.emissionPerSecond()) * 2;   // 2 nfts
-
-        // check tokens transfers
-        assertEq(token.balanceOf(address(streaming)), totalAllocation - totalClaimed - epsClaimable);
-        assertEq(userCTokenBalance_before + epsClaimable, userCTokenBalance_after);
-
-        // check streaming contract: tokenIds
-        for (uint256 i = tokenIds[0]; i < tokenIds.length; ++i) {
-
-            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
-
-            assertEq(claimed, epsClaimable/tokenIds.length);
-            assertEq(lastClaimedTimestamp, streaming.endTime());
-        }
-
-        // check streaming contract: storage variables
-        assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
-    }
-
-    function testOnlyDepositorCanWithdraw() public {
-
-        vm.expectRevert(abi.encodeWithSelector(OnlyDepositor.selector));
-       
-        vm.prank(userA);
-        streaming.withdraw();   
-    }
-
-    function testCannotWithdrawIfDeadlineNotDefined() public {
-
-        vm.expectRevert(abi.encodeWithSelector(WithdrawDisabled.selector));
-       
-        vm.prank(depositor);
-        streaming.withdraw();   
-    }
-
-    function testCannotUpdateDeadlineUnderEndTimeBuffer() public {
-        
-        uint256 newDeadline = (endTime + 13 days);
-
-        vm.expectRevert(abi.encodeWithSelector(InvalidNewDeadline.selector));
-
-        vm.prank(owner);
-        streaming.updateDeadline(newDeadline);
-    }
-
-    function testCannotUpdateDeadlineUnderCurrentTimestampBuffer() public {
-          
-        vm.expectRevert(abi.encodeWithSelector(InvalidNewDeadline.selector));
-
-        vm.prank(owner);
-        streaming.updateDeadline(block.timestamp + 13 days);
-    }
-
-    function testOwnerCanSetDeadline() public {
-
-        // verify before
-        assertEq(streaming.endTime(), endTime);
-
-        uint256 newDeadline = (endTime + 17 days);
-
-        // check events
-        vm.expectEmit(true, true, true, true);
-        emit DeadlineUpdated(newDeadline);
-
-        vm.prank(owner);
-        streaming.updateDeadline(newDeadline);
-
-        // verify after
-        assertEq(streaming.deadline(), newDeadline);
-    }
-}
-
-//Note: deadline is set -> endTime + 17 days
-abstract contract StateBeforeDeadline is StateStreamEndedPlusTwoDays {
-    
-    function setUp() public override virtual {
-        super.setUp(); 
-
-        vm.prank(owner);
-        streaming.updateDeadline(endTime + 17 days);
 
     }
-}
 
-contract StateBeforeDeadlineTest is StateBeforeDeadline {
-
-    function testUserACanClaim_AfterStreamEnded() public {
-
-        uint256 userATokenBalance_before = token.balanceOf(userA);
-
-        vm.prank(userA);
-        streaming.claimSingle(0);     
-
-        uint256 userATokenBalance_after = token.balanceOf(userA);
-        
-        // eps
-        uint256 epsClaimable = 7 * streaming.emissionPerSecond();
-        
-        // check tokens transfers
-        assertEq(token.balanceOf(address(streaming)), (totalAllocation - totalClaimed - epsClaimable));
-        assertEq(userATokenBalance_before + epsClaimable, userATokenBalance_after);
-
-        // check streaming contract
-        (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(0);
-        assertEq(claimed, token.balanceOf(userA));
-        assertEq(lastClaimedTimestamp, streaming.endTime());
-
-        // check streaming contract: storage variables
-        assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
-    }
-
-    function testUserCCanClaimMultiple_AfterStreamEnded() public {
-
-        uint256[] memory tokenIds = new uint256[](2);
-            tokenIds[0] = 2;
-            tokenIds[1] = 3;
-        uint256[] memory amounts = new uint256[](2);
-            amounts[0] = 7 * streaming.emissionPerSecond();
-            amounts[1] = 7 * streaming.emissionPerSecond();
-
-        // before
-        uint256 userCTokenBalance_before = token.balanceOf(userC);
-
-        // check events
-        vm.expectEmit(true, true, true, true);
-        emit Claimed(userC, tokenIds, amounts);
-
-        vm.prank(userC);
-        streaming.claim(tokenIds);     
-
-        uint256 userCTokenBalance_after = token.balanceOf(userC);
-        uint256 epsClaimable = (7 * streaming.emissionPerSecond()) * 2;   // 2 nfts
-
-        // check tokens transfers
-        assertEq(token.balanceOf(address(streaming)), totalAllocation - totalClaimed - epsClaimable);
-        assertEq(userCTokenBalance_before + epsClaimable, userCTokenBalance_after);
-
-        // check streaming contract: tokenIds
-        for (uint256 i = tokenIds[0]; i < tokenIds.length; ++i) {
-
-            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
-
-            assertEq(claimed, epsClaimable/tokenIds.length);
-            assertEq(lastClaimedTimestamp, streaming.endTime());
-        }
-
-        // check streaming contract: storage variables
-        assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
-    }
-
-}
-
-//Note: warp to after deadline
-abstract contract StateAfterDeadline is StateBeforeDeadline {
-    
-    function setUp() public override virtual {
-        super.setUp(); 
-
-        vm.warp((endTime + 18 days));
-    }
-}
-
-
-contract StateAfterDeadlineTest is StateAfterDeadline {
-
-    function testCannotClaimSingleAfterDeadline() public {
-        vm.expectRevert(abi.encodeWithSelector(DeadlineExceeded.selector));
-
-        vm.prank(userA);
-        streaming.claimSingle(0);
-    }
-
-    function testCannotClaimAfterDeadline() public {
-        vm.expectRevert(abi.encodeWithSelector(DeadlineExceeded.selector));
-
-        uint256[] memory tokenIds = new uint256[](2);
-            tokenIds[0] = 2;
-            tokenIds[1] = 3;
-
-        vm.prank(userC);
-        streaming.claim(tokenIds);  
-    }
-
-    function testCannotWithdrawEarly() public {
-
-        vm.warp(streaming.deadline() - 1 days);
-
-        vm.expectRevert(abi.encodeWithSelector(PrematureWithdrawal.selector));
-       
-        vm.prank(depositor);
-        streaming.withdraw();   
-    }
-
-    function testWithdraw() public {
-
-        uint256 remaining = totalAllocation - totalClaimed;
-
-        // pre-checks
-        assertEq(token.balanceOf(depositor), 0);
-        assertEq(token.balanceOf(address(streaming)), remaining);
-
-        // check events
-        vm.expectEmit(true, true, true, true);
-        emit Withdrawn(depositor,  remaining);
-
-        vm.prank(depositor);
-        streaming.withdraw();
-
-        // check tokens transfers
-        assertEq(token.balanceOf(address(streaming)), 0);
-        assertEq(token.balanceOf(depositor), remaining);
-
-    }
-
-}
-
-
-abstract contract StatePaused is StateAfterDeadline {
-
-    function setUp() public override virtual {
-        super.setUp();
-
-        vm.prank(owner);
-        streaming.pause();
-    }    
-}
-
-contract StatePausedTest is StatePaused {
-
-    function testCannotClaimSingleWhenPaused() public {
-        
-        vm.warp(streaming.endTime() - 1);
-        
-        vm.expectRevert(abi.encodeWithSelector(Pausable.EnforcedPause.selector));
-
-        vm.prank(userA);
-        streaming.claimSingle(0);         
-    }
-
-    function testCannotClaimWhenPaused() public {
-        
-        vm.warp(streaming.endTime() - 1);
-        
-        vm.expectRevert(abi.encodeWithSelector(Pausable.EnforcedPause.selector));
-
-        uint256[] memory tokenIds = new uint256[](2);
-            tokenIds[0] = 2;
-            tokenIds[1] = 3;
-
-        vm.prank(userC);
-        streaming.claim(tokenIds);      
-    }
-
-
-    function testCannotEmergencyExitIfNotFrozen() public {
-
-        vm.expectRevert(abi.encodeWithSelector(NotFrozen.selector));
-     
-        vm.prank(owner);
-        streaming.emergencyExit(owner);
-    }
-
-    function testOwnerCanUnpauseIfNotFrozen() public {
-        vm.prank(owner);
-        streaming.unpause();
-
-        assertEq(streaming.paused(), false);        
-    }
-
-    function testOwnerCanFreezeContract() public {
-
-        assertEq(streaming.isFrozen(), 0);
-
-        // check events
-        vm.expectEmit(true, true, true, true);
-        emit Frozen(block.timestamp);
-
-        vm.prank(owner);
-        streaming.freeze();
-
-        assertEq(streaming.isFrozen(), 1);
-    }
-}
-
-abstract contract StateFrozen is StatePaused {
-
-    function setUp() public override virtual {
-        super.setUp();
-        
-        vm.prank(owner);
-        streaming.freeze();
-    }    
-}
-
-contract StateFrozenTest is StateFrozen {
-
-    function testCannotFreezeTwice() public {
-
-        vm.expectRevert(abi.encodeWithSelector(IsFrozen.selector));
-
-        vm.prank(owner);
-        streaming.freeze();
-    }
-
-    function testCannotUnpauseIfFrozen() public {
-
-        vm.expectRevert(abi.encodeWithSelector(IsFrozen.selector));
-
-        vm.prank(owner);
-        streaming.unpause();
-    }
-
-    function testEmergencyExit() public {
-        
-        uint256 balance = token.balanceOf(address(streaming));
-
-        // check events
-        vm.expectEmit(true, false, false, false);
-        emit EmergencyExit(owner, balance);
-
-        vm.prank(owner);
-        streaming.emergencyExit(owner);
-
-        assertEq(token.balanceOf(owner), balance);
-    }
 }

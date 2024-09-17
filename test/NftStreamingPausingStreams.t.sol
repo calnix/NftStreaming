@@ -154,7 +154,7 @@ contract StateStreamingStartedTest is StateStreamingStarted {
 
 //Note: t = 3
 // users can call claim; 1 second of emissions claimable
-abstract contract StateT03 is StateDeposited {
+abstract contract StateT03 is StateStreamingStarted {
 
     function setUp() public override virtual {
         super.setUp(); 
