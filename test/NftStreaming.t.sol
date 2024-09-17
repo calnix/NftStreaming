@@ -7,6 +7,7 @@ import {NftStreaming} from "./../src/NftStreaming.sol";
 import "./../src/Errors.sol";
 import "./../src/Events.sol";
 
+import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {Pausable} from "openzeppelin-contracts/contracts/utils/Pausable.sol";
 import {ERC20Mock} from "openzeppelin-contracts/contracts/mocks/token/ERC20Mock.sol";
 
@@ -152,6 +153,7 @@ contract StateStreamingStartedTest is StateStreamingStarted {
 
 
 //Note: t = 3
+// users can call claim; 1 second of emissions claimable
 abstract contract StateT03 is StateDeposited {
 
     function setUp() public override virtual {
@@ -230,6 +232,8 @@ contract StateT03Test is StateT03 {
         // check streaming contract: storage variables
         assertEq(streaming.totalClaimed(), epsClaimable);
     }
+
+
 }
 
 //Note: t = 5 | 3 eps streamed in total
@@ -419,20 +423,123 @@ contract StateStreamEndedTest is StateStreamEnded {
         assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
     }
 
-    function testOwnerCannotSetInvdalidDeadline() public {   
-        // verify
-        assertEq(streaming.deadline(), 0);
+}
 
-        uint256 newDeadline = (endTime + 1 days);
+//Note: t = endTime + 2 days
+abstract contract StateStreamEndedPlusTwoDays is StateStreamEnded {
+    function setUp() public override virtual {
+        super.setUp(); 
 
+        vm.warp((endTime + 2 days));
+    }
+}
+
+contract StateStreamEndedPlusTwoDaysTest is StateStreamEndedPlusTwoDays {
+    
+    function testUserACanClaim_AfterStreamEnded() public {
+
+        uint256 userATokenBalance_before = token.balanceOf(userA);
+
+        vm.prank(userA);
+        streaming.claimSingle(0);     
+
+        uint256 userATokenBalance_after = token.balanceOf(userA);
+        
+        // eps
+        uint256 epsClaimable = 7 * streaming.emissionPerSecond();
+        
+        // check tokens transfers
+        assertEq(token.balanceOf(address(streaming)), (totalAllocation - totalClaimed - epsClaimable));
+        assertEq(userATokenBalance_before + epsClaimable, userATokenBalance_after);
+
+        // check streaming contract
+        (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(0);
+        assertEq(claimed, token.balanceOf(userA));
+        assertEq(lastClaimedTimestamp, streaming.endTime());
+
+        // check streaming contract: storage variables
+        assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
+    }
+
+    function testUserCCanClaimMultiple_AfterStreamEnded() public {
+
+        uint256[] memory tokenIds = new uint256[](2);
+            tokenIds[0] = 2;
+            tokenIds[1] = 3;
+        uint256[] memory amounts = new uint256[](2);
+            amounts[0] = 7 * streaming.emissionPerSecond();
+            amounts[1] = 7 * streaming.emissionPerSecond();
+
+        // before
+        uint256 userCTokenBalance_before = token.balanceOf(userC);
+
+        // check events
+        vm.expectEmit(true, true, true, true);
+        emit Claimed(userC, tokenIds, amounts);
+
+        vm.prank(userC);
+        streaming.claim(tokenIds);     
+
+        uint256 userCTokenBalance_after = token.balanceOf(userC);
+        uint256 epsClaimable = (7 * streaming.emissionPerSecond()) * 2;   // 2 nfts
+
+        // check tokens transfers
+        assertEq(token.balanceOf(address(streaming)), totalAllocation - totalClaimed - epsClaimable);
+        assertEq(userCTokenBalance_before + epsClaimable, userCTokenBalance_after);
+
+        // check streaming contract: tokenIds
+        for (uint256 i = tokenIds[0]; i < tokenIds.length; ++i) {
+
+            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
+
+            assertEq(claimed, epsClaimable/tokenIds.length);
+            assertEq(lastClaimedTimestamp, streaming.endTime());
+        }
+
+        // check streaming contract: storage variables
+        assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
+    }
+
+    function testOnlyDepositorCanWithdraw() public {
+
+        vm.expectRevert(abi.encodeWithSelector(OnlyDepositor.selector));
+       
+        vm.prank(userA);
+        streaming.withdraw();   
+    }
+
+    function testCannotWithdrawIfDeadlineNotDefined() public {
+
+        vm.expectRevert(abi.encodeWithSelector(WithdrawDisabled.selector));
+       
+        vm.prank(depositor);
+        streaming.withdraw();   
+    }
+
+    function testCannotUpdateDeadlineUnderEndTimeBuffer() public {
+        
+        uint256 newDeadline = (endTime + 13 days);
+
+        vm.expectRevert(abi.encodeWithSelector(InvalidNewDeadline.selector));
+
+        vm.prank(owner);
+        streaming.updateDeadline(newDeadline);
+    }
+
+    function testCannotUpdateDeadlineUnderCurrentTimestampBuffer() public {
+          
+        vm.expectRevert(abi.encodeWithSelector(InvalidNewDeadline.selector));
+
+        vm.prank(owner);
+        streaming.updateDeadline(block.timestamp + 13 days);
     }
 
     function testOwnerCanSetDeadline() public {
 
-        // verify
-        assertEq(streaming.deadline(), 0);
+        // verify before
+        assertEq(streaming.endTime(), endTime);
 
-        uint256 newDeadline = (endTime + 15 days);
+        uint256 newDeadline = (endTime + 17 days);
 
         // check events
         vm.expectEmit(true, true, true, true);
@@ -441,32 +548,262 @@ contract StateStreamEndedTest is StateStreamEnded {
         vm.prank(owner);
         streaming.updateDeadline(newDeadline);
 
-        // verify
+        // verify after
         assertEq(streaming.deadline(), newDeadline);
     }
-
 }
 
-
-//Note: t = 12
-abstract contract StateDeadline is StateStreamEnded {
+//Note: deadline is set -> endTime + 17 days
+abstract contract StateBeforeDeadline is StateStreamEndedPlusTwoDays {
     
     function setUp() public override virtual {
         super.setUp(); 
 
         vm.prank(owner);
-        streaming.updateDeadline(endTime + 15 days);
+        streaming.updateDeadline(endTime + 17 days);
 
-        vm.warp((endTime + 16 days));
+    }
+}
+
+contract StateBeforeDeadlineTest is StateBeforeDeadline {
+
+    function testUserACanClaim_AfterStreamEnded() public {
+
+        uint256 userATokenBalance_before = token.balanceOf(userA);
+
+        vm.prank(userA);
+        streaming.claimSingle(0);     
+
+        uint256 userATokenBalance_after = token.balanceOf(userA);
+        
+        // eps
+        uint256 epsClaimable = 7 * streaming.emissionPerSecond();
+        
+        // check tokens transfers
+        assertEq(token.balanceOf(address(streaming)), (totalAllocation - totalClaimed - epsClaimable));
+        assertEq(userATokenBalance_before + epsClaimable, userATokenBalance_after);
+
+        // check streaming contract
+        (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(0);
+        assertEq(claimed, token.balanceOf(userA));
+        assertEq(lastClaimedTimestamp, streaming.endTime());
+
+        // check streaming contract: storage variables
+        assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
+    }
+
+    function testUserCCanClaimMultiple_AfterStreamEnded() public {
+
+        uint256[] memory tokenIds = new uint256[](2);
+            tokenIds[0] = 2;
+            tokenIds[1] = 3;
+        uint256[] memory amounts = new uint256[](2);
+            amounts[0] = 7 * streaming.emissionPerSecond();
+            amounts[1] = 7 * streaming.emissionPerSecond();
+
+        // before
+        uint256 userCTokenBalance_before = token.balanceOf(userC);
+
+        // check events
+        vm.expectEmit(true, true, true, true);
+        emit Claimed(userC, tokenIds, amounts);
+
+        vm.prank(userC);
+        streaming.claim(tokenIds);     
+
+        uint256 userCTokenBalance_after = token.balanceOf(userC);
+        uint256 epsClaimable = (7 * streaming.emissionPerSecond()) * 2;   // 2 nfts
+
+        // check tokens transfers
+        assertEq(token.balanceOf(address(streaming)), totalAllocation - totalClaimed - epsClaimable);
+        assertEq(userCTokenBalance_before + epsClaimable, userCTokenBalance_after);
+
+        // check streaming contract: tokenIds
+        for (uint256 i = tokenIds[0]; i < tokenIds.length; ++i) {
+
+            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
+
+            assertEq(claimed, epsClaimable/tokenIds.length);
+            assertEq(lastClaimedTimestamp, streaming.endTime());
+        }
+
+        // check streaming contract: storage variables
+        assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
+    }
+
+}
+
+//Note: warp to after deadline
+abstract contract StateAfterDeadline is StateBeforeDeadline {
+    
+    function setUp() public override virtual {
+        super.setUp(); 
+
+        vm.warp((endTime + 18 days));
     }
 }
 
 
-contract StateDeadlineTest is StateDeadline {
+contract StateAfterDeadlineTest is StateAfterDeadline {
 
-    function testDepositorCanWithdraw() public {
+    function testCannotClaimSingleAfterDeadline() public {
+        vm.expectRevert(abi.encodeWithSelector(DeadlineExceeded.selector));
+
+        vm.prank(userA);
+        streaming.claimSingle(0);
+    }
+
+    function testCannotClaimAfterDeadline() public {
+        vm.expectRevert(abi.encodeWithSelector(DeadlineExceeded.selector));
+
+        uint256[] memory tokenIds = new uint256[](2);
+            tokenIds[0] = 2;
+            tokenIds[1] = 3;
+
+        vm.prank(userC);
+        streaming.claim(tokenIds);  
+    }
+
+    function testCannotWithdrawEarly() public {
+
+        vm.warp(streaming.deadline() - 1 days);
+
+        vm.expectRevert(abi.encodeWithSelector(PrematureWithdrawal.selector));
+       
+        vm.prank(depositor);
+        streaming.withdraw();   
+    }
+
+    function testWithdraw() public {
+
+        uint256 remaining = totalAllocation - totalClaimed;
+
+        // pre-checks
+        assertEq(token.balanceOf(depositor), 0);
+        assertEq(token.balanceOf(address(streaming)), remaining);
+
+        // check events
+        vm.expectEmit(true, true, true, true);
+        emit Withdrawn(depositor,  remaining);
 
         vm.prank(depositor);
         streaming.withdraw();
+
+        // check tokens transfers
+        assertEq(token.balanceOf(address(streaming)), 0);
+        assertEq(token.balanceOf(depositor), remaining);
+
+    }
+
+}
+
+
+abstract contract StatePaused is StateAfterDeadline {
+
+    function setUp() public override virtual {
+        super.setUp();
+
+        vm.prank(owner);
+        streaming.pause();
+    }    
+}
+
+contract StatePausedTest is StatePaused {
+
+    function testCannotClaimSingleWhenPaused() public {
+        
+        vm.warp(streaming.endTime() - 1);
+        
+        vm.expectRevert(abi.encodeWithSelector(Pausable.EnforcedPause.selector));
+
+        vm.prank(userA);
+        streaming.claimSingle(0);         
+    }
+
+    function testCannotClaimWhenPaused() public {
+        
+        vm.warp(streaming.endTime() - 1);
+        
+        vm.expectRevert(abi.encodeWithSelector(Pausable.EnforcedPause.selector));
+
+        uint256[] memory tokenIds = new uint256[](2);
+            tokenIds[0] = 2;
+            tokenIds[1] = 3;
+
+        vm.prank(userC);
+        streaming.claim(tokenIds);      
+    }
+
+
+    function testCannotEmergencyExitIfNotFrozen() public {
+
+        vm.expectRevert(abi.encodeWithSelector(NotFrozen.selector));
+     
+        vm.prank(owner);
+        streaming.emergencyExit(owner);
+    }
+
+    function testOwnerCanUnpauseIfNotFrozen() public {
+        vm.prank(owner);
+        streaming.unpause();
+
+        assertEq(streaming.paused(), false);        
+    }
+
+    function testOwnerCanFreezeContract() public {
+
+        assertEq(streaming.isFrozen(), 0);
+
+        // check events
+        vm.expectEmit(true, true, true, true);
+        emit Frozen(block.timestamp);
+
+        vm.prank(owner);
+        streaming.freeze();
+
+        assertEq(streaming.isFrozen(), 1);
+    }
+}
+
+abstract contract StateFrozen is StatePaused {
+
+    function setUp() public override virtual {
+        super.setUp();
+        
+        vm.prank(owner);
+        streaming.freeze();
+    }    
+}
+
+contract StateFrozenTest is StateFrozen {
+
+    function testCannotFreezeTwice() public {
+
+        vm.expectRevert(abi.encodeWithSelector(IsFrozen.selector));
+
+        vm.prank(owner);
+        streaming.freeze();
+    }
+
+    function testCannotUnpauseIfFrozen() public {
+
+        vm.expectRevert(abi.encodeWithSelector(IsFrozen.selector));
+
+        vm.prank(owner);
+        streaming.unpause();
+    }
+
+    function testEmergencyExit() public {
+        
+        uint256 balance = token.balanceOf(address(streaming));
+
+        // check events
+        vm.expectEmit(true, false, false, false);
+        emit EmergencyExit(owner, balance);
+
+        vm.prank(owner);
+        streaming.emergencyExit(owner);
+
+        assertEq(token.balanceOf(owner), balance);
     }
 }

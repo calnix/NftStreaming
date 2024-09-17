@@ -387,11 +387,28 @@ contract NftStreaming is Pausable, Ownable2Step {
 
             uint256 tokenId = tokenIds[i];
 
-            Stream memory stream = streams[tokenId];
-            stream.isPaused = true;
+            streams[tokenId].isPaused = true;
         }
 
         emit StreamsPaused(tokenIds);
+    }
+
+    function unpauseStreams(uint256[] calldata tokenIds) external onlyOwner {
+
+        // array validation
+        uint256 tokenIdsLength = tokenIds.length;
+        if(tokenIdsLength == 0) revert EmptyArray(); 
+
+        // unpause streams
+        for (uint256 i = 0; i < tokenIdsLength; ++i) {
+
+            uint256 tokenId = tokenIds[i];
+
+            delete streams[tokenId].isPaused;
+        }        
+
+        emit StreamsUnpaused(tokenIds);
+
     }
 
     /*//////////////////////////////////////////////////////////////
