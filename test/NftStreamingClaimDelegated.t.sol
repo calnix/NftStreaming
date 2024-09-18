@@ -11,22 +11,141 @@ import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 import {Pausable} from "openzeppelin-contracts/contracts/utils/Pausable.sol";
 import {ERC20Mock} from "openzeppelin-contracts/contracts/mocks/token/ERC20Mock.sol";
 
-import "./MockNFT.sol";
-import "./MockModuleContract.sol";
+import {IDelegateRegistry} from "./../src/IDelegateRegistry.sol";
+import {IERC721} from "./../lib/openzeppelin-contracts/contracts/interfaces/IERC721.sol";
 
-abstract contract StateDeploy is Test {    
+abstract contract ForkMainnet is Test {
+    
+    // chain to fork
+    uint256 public mainnetFork;   
+    string public MAINNET_RPC_URL = vm.envString("MAINNET_RPC_URL");
+
+    // contracts to fork
+    IDelegateRegistry public delegateV2;
+    IERC721 public mocaNft;
+
+    // create fork
+    function setUp() public virtual {
+
+        // fork
+        mainnetFork = vm.createSelectFork(MAINNET_RPC_URL);
+
+        // https://docs.delegate.xyz/technical-documentation/delegate-registry/contract-addresses
+        delegateV2 = IDelegateRegistry(0x00000000000000447e69651d841bD8D104Bed493);
+
+        // https://etherscan.io/address/0x59325733eb952a92e069c87f0a6168b29e80627f
+        mocaNft = IERC721(0x59325733eb952a92e069C87F0A6168b29E80627f);
+    }
+}
+
+//Note: Forking sanity checks
+contract ForkMainnetTest is ForkMainnet {
+    
+    function testForkSelected() public {
+        
+        // confirm fork selected
+        assertEq(vm.activeFork(), mainnetFork);
+    }
+
+    function testContractForked() public {
+   
+        /**
+            ref txn: https://etherscan.io/address/0x00000000000000447e69651d841bD8D104Bed493#readContract
+
+            In the above txn, msg.sender calls `delegateAll` on delegateV2, passing the following inputs:
+            - to: 	0x7C1d54cdF93998dD55900e4e2FAFC555DFe2cB3a
+            - rights: 0x0000000000000000000000000000000000000000000000000000000000000000
+            - enable: true
+
+            We verify our fork, by calling the view fn `getOutgoingDelegations` on both etherscan and here
+            - the outputs should match
+            - output is an array of struct Delegation
+            - array has only 1 member
+        */
+        
+        // txn executed as per block 20773809
+        vm.rollFork(20_773_809);  
+        assertEq(block.number, 20_773_809);
+
+        //Note: we lock-in the block.number to ensure that future txns do not alter our asserts below
+
+        IDelegateRegistry.Delegation[] memory delegations = delegateV2.getOutgoingDelegations(0xf280f36f0e8FE65eaA6d24B4D4204Ec73e9C1A29);
+
+        assertEq(uint8(delegations[0].type_), 1);  // enum DelegationType
+
+        assertEq(delegations[0].to, 0x7C1d54cdF93998dD55900e4e2FAFC555DFe2cB3a);
+        assertEq(delegations[0].from, 0xf280f36f0e8FE65eaA6d24B4D4204Ec73e9C1A29);
+        assertEq(delegations[0].rights, bytes32(0));
+        
+        assertEq(delegations[0].contract_, address(0));
+        
+        assertEq(delegations[0].tokenId, 0);
+        assertEq(delegations[0].amount, 0);
+    }
+
+    function testMocaForked() public {
+        // ref txn: https://etherscan.io/tx/0x739f705d933d2571d9155369983bc32d9205941f4c018806897f28d5ae75e3ce
+
+        // txn executed as per block 20771533
+        vm.rollFork(20771533);  
+        assertEq(block.number, 20771533);
+
+        address owner = mocaNft.ownerOf(7336);
+        
+        // check new owner
+        assertEq(owner, 0x839c159bABA1bfD3f9585A93f5C4677EE8e59a8c);
+    }
+}
+
+abstract contract SimulateUsersAndDelegations is ForkMainnet {
+    using stdStorage for StdStorage;
+
+    // users
+    address public userA;
+    address public userB;
+    address public userC;
+
+    function setUp() public virtual override{
+        super.setUp();
+
+        // users
+        userA = makeAddr("userA");
+        userB = makeAddr("userB");
+        userC = makeAddr("userC");
+
+        // edit storage 
+        stdstore
+            .target(address(mocaNft))
+            .sig("ownerOf(uint256)")
+            .with_key(1)
+            .checked_write(userA);
+
+        address owner = mocaNft.ownerOf(1);
+        
+        // check new owner
+        assertEq(owner, userA);
+    }
+}
+
+contract SimulateUsersAndDelegationsTest is SimulateUsersAndDelegations {
+
+    function testUserOwnership() public {
+
+                      
+         // check new owner
+        address owner = mocaNft.ownerOf(1);
+        assertEq(owner, userA);
+        
+    }
+}
+/*
+abstract contract StateDeploy is SimulateUsersAndDelegations {    
     using stdStorage for StdStorage;
 
     NftStreaming public streaming;
     ERC20Mock public token;
-    MockNFT public nft;
-
-    MockModuleContract public mockModule;
 
     // entities
-    address public userA;
-    address public userB;
-    address public userC;
     address public owner;
     address public operator;
     address public depositor;
@@ -42,15 +161,13 @@ abstract contract StateDeploy is Test {
     // record-keeping
     uint256 public totalClaimed;
 
-    function setUp() public virtual {
+    function setUp() public virtual override {
+        super.setUp();
 
         // starting point: T0
         vm.warp(0 days); 
 
         // users
-        userA = makeAddr("userA");
-        userB = makeAddr("userB");
-        userC = makeAddr("userC");
         owner = makeAddr("owner");
         operator = makeAddr("operator");
         depositor = makeAddr("depositor");
@@ -65,12 +182,9 @@ abstract contract StateDeploy is Test {
         vm.startPrank(owner);
 
         token = new ERC20Mock();       
-        nft = new MockNFT();
 
         streaming = new NftStreaming(address(nft), address(token), owner, depositor, address(0), 
                                     allocationPerNft, startTime, endTime);
-
-        mockModule = new MockModuleContract(address(nft));
 
         vm.stopPrank();
 
@@ -95,7 +209,8 @@ abstract contract StateDeploy is Test {
 
     }
 }
-
+*/
+/*
 //Note: t = 0
 contract StateDeployTest is StateDeploy {
 
@@ -271,3 +386,4 @@ contract StateT03Test is StateT03 {
     }
 
 }
+*/
