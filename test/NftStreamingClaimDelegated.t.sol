@@ -357,7 +357,7 @@ contract StateT03Test is StateT03 {
 
         // ---------------------------------------------------
 
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(InvalidDelegate.selector));
 
         vm.prank(userB);
         streaming.claimDelegated(tokenIds);
