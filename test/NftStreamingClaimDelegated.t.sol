@@ -893,7 +893,7 @@ contract StateBeforeDeadlineTest is StateBeforeDeadline {
         // check streaming contract: user
         (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(0);
         assertEq(claimed, token.balanceOf(userA_cw));
-        assertEq(lastClaimedTimestamp, block.timestamp);
+        assertEq(lastClaimedTimestamp, streaming.endTime());
 
         // check streaming contract: storage variables
         assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
@@ -944,7 +944,7 @@ contract StateBeforeDeadlineTest is StateBeforeDeadline {
             (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
 
             assertEq(claimed, epsClaimable/tokenIds.length);
-            assertEq(lastClaimedTimestamp, block.timestamp);
+            assertEq(lastClaimedTimestamp, streaming.endTime());
         }
 
         // check streaming contract: storage variables
