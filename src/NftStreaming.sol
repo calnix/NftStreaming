@@ -186,8 +186,18 @@ contract NftStreaming is Pausable, Ownable2Step {
                         (msg.sender, nftOwner, address(NFT), tokenId, ""));
         }
 
-        // if a tokenId is not delegated will revert with: MulticallFailed()
-        DELEGATE_REGISTRY.multicall(data);
+        bytes[] memory results = DELEGATE_REGISTRY.multicall(data);
+
+        // if a tokenId is not delegated will return null bytes for that element
+        for (uint256 i = 0; i < tokenIdsLength; ++i) {
+            
+            bytes memory nullBytes;
+            //bool isNullBytes = keccak256(results[i]) == keccak256(nullBytes);
+            
+            bool isNullBytes = keccak256(abi.encodePacked(results[i])) == keccak256(abi.encodePacked(nullBytes));
+
+            if(isNullBytes) revert InvalidDelegate();
+        }
 
         // update claims
         uint256 totalAmount;

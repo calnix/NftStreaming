@@ -13,6 +13,7 @@ error InvalidOwner();
 error IncorrectClaimable();
 error EmptyArray();
 error StreamPaused();
+error InvalidDelegate();
 
 error OnlyDepositor();
 error ExcessDeposit();
