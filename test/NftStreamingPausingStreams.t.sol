@@ -205,7 +205,6 @@ contract StateT03Test is StateT03 {
         assertEq(streaming.totalClaimed(), epsClaimable);
     }
 
-
     function testUsersCannotPauseStream() public {
         uint256[] memory tokenIds = new uint256[](2);
             tokenIds[0] = 1;
@@ -524,6 +523,3 @@ contract StateStreamEndedTest is StateStreamEnded {
     }
 
 }
-
-
-// claiming on deadline set, and cannot claim after deadline

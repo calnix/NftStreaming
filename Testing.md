@@ -32,25 +32,25 @@
         - 4 units claimable by userC
         - 6 claimable in total
 
-- t12: streaming ended; endTime = 12.
+- t12: streaming ended; endTime = 12 *[StateStreamEnded]*
         - userA has previously claimed: 3 units
         - userC has previously claimed: 6 units
         - each nft has 7 units of eps claimable
         - userA can claim 7 eps on tokenId 0
         - userC can claim 7 eps on tokenId 2,3; total of 14
 
-- t12 + 2 days: 2 days after endTime
+- t12 + 2 days: 2 days after endTime *[StateStreamEndedPlusTwoDays]*
         - users should be able to still claim after streaming has ended.
         - withdraw is not possible, as deadline as not been defined.
         - deadline can only be updated such that its a future date, minimally 14 days from now or endTime; whichever more recent.
         - only owner can update the deadline
         - *deadline updated to endTime + 17 days*
 
-- t12 + 17 days: 17 days after endTime *[on deadline]*
+- t12 + 17 days: 17 days after endTime *[StateBeforeDeadline]*
         - deadline check ensures that no claiming can be done **after** the deadline.
         - on the deadline time itself, claiming it possible.
 
-- t12 + 18 days: 18 days after endTime *[deadline exceeded]*
+- t12 + 18 days: 18 days after endTime *[StateAfterDeadline]*
         - since deadline has been exceeded, no claiming is possible.
         - early withdrawal before deadline is not possible, but once exceeded is allowed.
 
@@ -60,7 +60,7 @@ Tests core functionality through `claimSingle` and `claim`. Uses mocks for nft a
 
 ## NftStreamingClaimModule.t.sol
 
-Builds on NftStreaming.t.sol to test core functionality through `claimViaModule`.
+Builds on NftStreaming.t.sol to test core functionality through `claimViaModule`. Uses mocks for nft and tokens.
 
 UserB locks their nfts at t3 and only claims via `claimViaModule` from t12 onwards.
 UserC lock 1 of 2 nfts at t3, claiming of the locked nft at t5, and then subsequently unlocking it.
@@ -89,15 +89,17 @@ UserC lock 1 of 2 nfts at t3, claiming of the locked nft at t5, and then subsequ
         - test that userC can claim for both nfts on self via `claimMultiple`
         - test that userB can claim full amount via `claimViaModule`
 
-- t12 + 17 days: 17 days after endTime *[StateAfterDeadline]*
-    - test `claimViaModule` reverts
+- t12 + 18 days: 18 days after endTime *[StateAfterDeadline]*
+        - test `claimViaModule` reverts
 
 ## NftStreamingClaimDelegated.t.sol
 
-Tests core functionality through `claimDelegated`.
-
-
+Builds on NftStreaming.t.sol to test core functionality through `claimViaModule`.
+Forks mainnet for delegationV2 and mocaNft. Tokens are mocked.
 
 ## NftStreamingPausingStreams.t.sol
 
-Tests functionality of pausing individual streams by owner.
+Tests functionality of pausing individual streams.
+
+- t5: tokenIds 1,2,3 are paused; corresponding to userB and userC
+- t12: tokenIds 1,2,3 are unpaused
