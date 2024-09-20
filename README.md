@@ -10,7 +10,7 @@ All NFTs get the same amount streamed.
 
 ## Delegation of NFTs
 
-- Expect users to be delegating via the function: `delegateAll(hotWallet, bytes32(0), true)`
+- Expect users to be delegating via the function: `delegateAll(hotWallet, bytes32(0), true)`  or `??????????????`
 - Hence, the delegation check is done via: `checkDelegateForERC721(hw1, cw, nftAddress, tokenId, "")`
 
 ## Roles
@@ -18,6 +18,16 @@ All NFTs get the same amount streamed.
 - users
 - depositor
 - owner
+- operator
+
+### Operator role
+
+- risky eoa wallet
+- pause contract
+- pause specific stream
+
+Operator can pause, but not unpause. This is to prevent malicious unpausing, in the event the owner initially paused the contract.
+Pausing the contract or specific streams will not affect the amount streamed, so as long users can claim before the deadline is exceeded.
 
 ## Claiming of Streams
 
@@ -40,7 +50,6 @@ Contract allows a specific stream to be paused indefinitely.
 - Pausing prevents the hacker from benefitting from the stream.
 - Indefinitely paused streams would subsequently be unclaimable once the deadline (if defined) has been exceeded.
 
-> consider if implementing pausing is really necessary
 
 ## Modules
 

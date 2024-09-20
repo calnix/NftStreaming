@@ -237,7 +237,7 @@ abstract contract StateDeploy is SimulateUsersAndDelegations {
 
         token = new ERC20Mock();       
 
-        streaming = new NftStreaming(address(mocaNft), address(token), owner, depositor, address(delegateV2), 
+        streaming = new NftStreaming(address(mocaNft), address(token), owner, depositor, operator, address(delegateV2), 
                                     allocationPerNft, startTime, endTime);
 
         vm.stopPrank();
@@ -960,6 +960,31 @@ contract StateBeforeDeadlineTest is StateBeforeDeadline {
 
         // check streaming contract: storage variables
         assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
+    }
+
+}
+
+//Note: warp to after deadline
+abstract contract StateAfterDeadline is StateBeforeDeadline {
+    
+    function setUp() public override virtual {
+        super.setUp(); 
+
+        vm.warp((endTime + 18 days));
+    }
+}
+
+contract StateAfterDeadlineTest is StateAfterDeadline {
+
+    function testCannotClaimDelegatedAfterDeadline() public {
+
+        uint256[] memory tokenIds = new uint256[](1);
+            tokenIds[0] = 0;
+
+        vm.expectRevert(abi.encodeWithSelector(DeadlineExceeded.selector));
+
+        vm.prank(userA);
+        streaming.claimDelegated(tokenIds);  
     }
 
 }

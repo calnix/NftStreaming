@@ -47,7 +47,10 @@ contract NftStreaming is Pausable, Ownable2Step {
     uint256 public totalDeposited;
     
     // optional: Users can claim until this timestamp
-    uint256 public deadline;                
+    uint256 public deadline;    
+
+    // operator role: can pause, cannot unpause
+    address public operator;            
 
     // emergency state: 1 is Frozed. 0 is not.
     uint256 public isFrozen;
@@ -71,16 +74,9 @@ contract NftStreaming is Pausable, Ownable2Step {
     mapping(address module => bool isRegistered) public modules;    // Trusted contracts to call
 
     constructor(
-        address nft, address token, address owner, address depositor_, address delegateRegistry,
+        address nft, address token, address owner, address depositor_, address operator_, address delegateRegistry,
         uint256 allocationPerNft_, uint256 startTime_, uint256 endTime_) Ownable(owner) {
-        
-        NFT = IERC721(nft);
-        TOKEN = IERC20(token);
-
-        DELEGATE_REGISTRY = IDelegateRegistry(delegateRegistry);
-        
-        depositor = depositor_;
-
+             
         // check inputs 
         if(startTime_ <= block.timestamp) revert InvalidStartime();
         if(endTime_ <= startTime_) revert InvalidEndTime(); 
@@ -88,12 +84,21 @@ contract NftStreaming is Pausable, Ownable2Step {
 
         // calculate emissionPerSecond
         uint256 period = endTime_ - startTime_; 
-        emissionPerSecond = allocationPerNft_ / period;
-        if(emissionPerSecond == 0) revert InvalidEmission();
+        uint256 emissionPerSecond_ = allocationPerNft_ / period; 
+        if(emissionPerSecond_ == 0) revert InvalidEmission();
 
-        // storage
+        // update storage
+        NFT = IERC721(nft);
+        TOKEN = IERC20(token);
+        DELEGATE_REGISTRY = IDelegateRegistry(delegateRegistry);
+
+        depositor = depositor_;
+        operator = operator_;
+
         startTime = startTime_;
         endTime = endTime_;
+        emissionPerSecond = emissionPerSecond_;
+
         allocationPerNft = allocationPerNft_;        
         totalAllocation = allocationPerNft_ * totalSupply;
 
@@ -227,29 +232,6 @@ contract NftStreaming is Pausable, Ownable2Step {
 
     }
 
-/*
-    // note: remove and update NftLocker.sol
-    function claimLocked(uint256[] calldata tokenIds) external payable whenStartedAndBeforeDeadline whenNotPaused {
-        
-        // array validation
-        uint256 tokenIdsLength = tokenIds.length;
-        if(tokenIdsLength == 0) revert EmptyArray(); 
-
-        // check if locked by msg.sender
-        for (uint256 i = 0; i < tokenIdsLength; ++i) {
-
-            uint256 tokenId = tokenIds[i];
-
-            // note: modify NftLocker - add a view function that takes in `uint256[] tokenIds` as param
-            // view function will verify ownership
-            // save on x-contract calls
-            // if(locker.nfts(tokenId) != msg.sender) revert InvalidOwner(); 
-        }
-
-
-
-    }
-*/
     // if nft is on some contract (e.g. staking pro)
     function claimViaModule(address module, uint256[] calldata tokenIds) external payable whenStartedAndBeforeDeadline whenNotPaused {
         if(module == address(0)) revert ZeroAddress();      // in-case someone fat-fingers and allows zero address in modules mapping
@@ -384,8 +366,29 @@ contract NftStreaming is Pausable, Ownable2Step {
         emit ModuleUpdated(module, set);
     }
 
-    function pauseStreams(uint256[] calldata tokenIds) external onlyOwner {
+    /**
+     * @notice Owner to update operator role
+     * @dev Can be set to address(0) to eliminiate the role
+     */ 
+    function updateOperator(address newOperator) external onlyOwner {
         
+        address oldOperator = operator;
+        operator = newOperator;
+
+        emit OperatorUpdated(oldOperator, newOperator);
+    }
+
+    /**
+     * @notice Owner or operator can pause streams
+     */ 
+    function pauseStreams(uint256[] calldata tokenIds) external {
+        
+        // if not operator, check if owner; else revert
+        if(msg.sender != operator) {
+            _checkOwner();
+        }
+
+
         // array validation
         uint256 tokenIdsLength = tokenIds.length;
         if(tokenIdsLength == 0) revert EmptyArray(); 
@@ -401,6 +404,9 @@ contract NftStreaming is Pausable, Ownable2Step {
         emit StreamsPaused(tokenIds);
     }
 
+    /**
+     * @notice Only owner can unpause streams
+     */ 
     function unpauseStreams(uint256[] calldata tokenIds) external onlyOwner {
 
         // array validation
@@ -429,7 +435,7 @@ contract NftStreaming is Pausable, Ownable2Step {
             to avoid having to commit a large initial sum
      * @param amount Amount to deposit
      */
-    function deposit(uint256 amount) external {
+    function deposit(uint256 amount) external whenNotPaused {
         if(msg.sender != depositor) revert OnlyDepositor(); 
 
         // surplus check
@@ -447,7 +453,7 @@ contract NftStreaming is Pausable, Ownable2Step {
      * @notice Depositor to withdraw all unclaimed tokens past the specified deadline
      * @dev Only possible if deadline has been defined and exceeded
      */
-    function withdraw() external {
+    function withdraw() external whenNotPaused {
         if(msg.sender != depositor) revert OnlyDepositor(); 
 
         // if deadline is not defined; cannot withdraw
@@ -471,14 +477,22 @@ contract NftStreaming is Pausable, Ownable2Step {
     //////////////////////////////////////////////////////////////*/
 
     /**
-     * @notice Pause claim
+     * @notice Pause claiming, deposit and withdraw
+     * @dev Either the operator or owner can call; no one else
      */
-    function pause() external onlyOwner whenNotPaused {
+    function pause() external whenNotPaused {
+        
+        // if not operator, check if owner; else revert
+        if(msg.sender != operator) {
+            _checkOwner();
+        }
+
         _pause();
     }
 
     /**
      * @notice Unpause claim. Cannot unpause once frozen
+     * @dev Only owner can unpause.
      */
     function unpause() external onlyOwner whenPaused {
         if(isFrozen == 1) revert IsFrozen(); 
@@ -540,7 +554,6 @@ contract NftStreaming is Pausable, Ownable2Step {
 
         _;
     }
-
 
 
 }

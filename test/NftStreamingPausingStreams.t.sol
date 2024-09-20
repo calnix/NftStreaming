@@ -64,7 +64,7 @@ abstract contract StateDeploy is Test {
         token = new ERC20Mock();       
         nft = new MockNFT();
 
-        streaming = new NftStreaming(address(nft), address(token), owner, depositor, address(0), 
+        streaming = new NftStreaming(address(nft), address(token), owner, depositor, operator, address(0), 
                                     allocationPerNft, startTime, endTime);
 
         vm.stopPrank();
@@ -216,6 +216,27 @@ contract StateT03Test is StateT03 {
         streaming.pauseStreams(tokenIds);
     }
 
+    function testOperatorCanPauseStream() public {
+        uint256[] memory tokenIds = new uint256[](3);
+            tokenIds[0] = 1;    //userB
+            tokenIds[1] = 2;    //userC
+            tokenIds[2] = 3;    //userC
+
+        // check events
+        vm.expectEmit(true, true, true, true);
+        emit StreamsPaused(tokenIds);
+
+        vm.prank(operator);
+        streaming.pauseStreams(tokenIds);
+
+        // check streaming contract: tokenIds
+        for (uint256 i = tokenIds[0]; i < tokenIds.length; ++i) {
+            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
+
+            assertEq(isPaused, true);
+        }
+    }
+
     function testOwnerCanPauseStream() public {
         uint256[] memory tokenIds = new uint256[](3);
             tokenIds[0] = 1;    //userB
@@ -278,25 +299,6 @@ abstract contract StateT05 is StateT03 {
 
 contract StateT05Test is StateT05 {
 
-    function testUsersCannotClaimPausedStream() public {
-        uint256[] memory userBtokenIds = new uint256[](1);
-            userBtokenIds[0] = 1;    //userB
-
-        uint256[] memory userCTokenIds = new uint256[](2);
-            userCTokenIds[0] = 2;    
-            userCTokenIds[1] = 3;    
-
-        vm.expectRevert(abi.encodeWithSelector(StreamPaused.selector));
-
-        vm.prank(userB);
-        streaming.claim(userBtokenIds);     
-
-        vm.expectRevert(abi.encodeWithSelector(StreamPaused.selector));
-
-        vm.prank(userC);
-        streaming.claim(userCTokenIds);      
-    }
-
     // 2 seconds of emissions claimable | 1 eps claimed
     // userA unaffected by pausing of other streams
     function testUserACanClaim_T05() public {
@@ -322,6 +324,38 @@ contract StateT05Test is StateT05 {
 
         // check streaming contract: storage variables
         assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
+    }
+
+    function testUsersCannotClaimPausedStream() public {
+        uint256[] memory userBtokenIds = new uint256[](1);
+            userBtokenIds[0] = 1;    //userB
+
+        uint256[] memory userCTokenIds = new uint256[](2);
+            userCTokenIds[0] = 2;    
+            userCTokenIds[1] = 3;    
+
+        vm.expectRevert(abi.encodeWithSelector(StreamPaused.selector));
+
+        vm.prank(userB);
+        streaming.claim(userBtokenIds);     
+
+        vm.expectRevert(abi.encodeWithSelector(StreamPaused.selector));
+
+        vm.prank(userC);
+        streaming.claim(userCTokenIds);      
+    }
+
+    function testOperatorCannotUnpauseStream() public {
+        uint256[] memory tokenIds = new uint256[](3);
+            tokenIds[0] = 1;    //userB
+            tokenIds[1] = 2;    //userC
+            tokenIds[2] = 3;    //userC
+        
+        vm.expectRevert(abi.encodeWithSelector((Ownable.OwnableUnauthorizedAccount.selector), operator));
+
+        vm.prank(operator);
+        streaming.unpauseStreams(tokenIds);
+
     }
 
     function testOwnerCanUnpauseStream() public {

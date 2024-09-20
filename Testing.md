@@ -1,8 +1,3 @@
-Operator role
-- risky eoa wallet
-- pause contract
-- pause specific stream
-
 # Testing Suite
 
 ## Nft holders
@@ -28,7 +23,7 @@ Operator role
 
 - t2: streaming started; startTime=2. However, users cannot call claim or claimMultiple.
 
-- t3: users can call claim functions;
+- t3: users call claim functions;
         - 1 second of emissions claimable per nft.
         - 3 units of eps streamed in total.
 
@@ -63,13 +58,45 @@ Operator role
 
 Tests core functionality through `claimSingle` and `claim`. Uses mocks for nft and tokens.
 
+## NftStreamingClaimModule.t.sol
+
+Builds on NftStreaming.t.sol to test core functionality through `claimViaModule`.
+
+UserB locks their nfts at t3 and only claims via `claimViaModule` from t12 onwards.
+UserC lock 1 of 2 nfts at t3, claiming of the locked nft at t5, and then subsequently unlocking it.
+
+- t3: both userA and C claim through `claimSingle` and `claim`.
+        - userB locks their nft on module. does not claim.
+        - userC locks an nft on a module contract, retaining 1 nft on self; after claiming.
+
+- t5: userC has 1 nft on self, another nft on an external module contract
+        - test that userA is unaffected by any module related operations.
+        - test that userC can claim the same, for both nfts.
+        - after claiming userC unlocks his nft; hereinafter both nfts are on self.
+
+- t12: streaming ended; endTime = 12 *[StateStreamEnded]*
+        - test that userA is unaffected by any module related operations.
+        - test that userC can claim for both nfts on self via `claimMultiple`
+        - test that userB can claim full amount via `claimViaModule`
+
+- t12 + 2 days: 2 days after endTime *[StateStreamEndedPlusTwoDays]*
+        - test that userA is unaffected by any module related operations.
+        - test that userC can claim for both nfts on self via `claimMultiple`
+        - test that userB can claim full amount via `claimViaModule`
+
+- t12 + 17 days: 17 days after endTime *[StateBeforeDeadline]*
+        - test that userA is unaffected by any module related operations.
+        - test that userC can claim for both nfts on self via `claimMultiple`
+        - test that userB can claim full amount via `claimViaModule`
+
+- t12 + 17 days: 17 days after endTime *[StateAfterDeadline]*
+    - test `claimViaModule` reverts
+
 ## NftStreamingClaimDelegated.t.sol
 
 Tests core functionality through `claimDelegated`.
 
-## NftStreamingClaimModule.t.sol
 
-Tests core functionality through `claimViaModule`.
 
 ## NftStreamingPausingStreams.t.sol
 

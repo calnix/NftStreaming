@@ -64,7 +64,7 @@ abstract contract StateDeploy is Test {
         token = new ERC20Mock();       
         nft = new MockNFT();
 
-        streaming = new NftStreaming(address(nft), address(token), owner, depositor, address(0), 
+        streaming = new NftStreaming(address(nft), address(token), owner, depositor, operator, address(0), 
                                     allocationPerNft, startTime, endTime);
 
         vm.stopPrank();
@@ -701,6 +701,14 @@ contract StateAfterDeadlineTest is StateAfterDeadline {
         streaming.withdraw();   
     }
 
+    function testUserCannotPause() public {
+        
+        vm.expectRevert(abi.encodeWithSelector((Ownable.OwnableUnauthorizedAccount.selector), userA));
+
+        vm.prank(userA);
+        streaming.pause();
+    }
+
     function testWithdraw() public {
 
         uint256 remaining = totalAllocation - totalClaimed;
@@ -720,6 +728,26 @@ contract StateAfterDeadlineTest is StateAfterDeadline {
         assertEq(token.balanceOf(address(streaming)), 0);
         assertEq(token.balanceOf(depositor), remaining);
 
+    }
+
+    function testOperatorCanPause() public {
+
+        assertEq(streaming.paused(), false);
+
+        vm.prank(operator);
+        streaming.pause();
+
+        assertEq(streaming.paused(), true);
+    }
+
+    function testOwnerCanPause() public {
+
+        assertEq(streaming.paused(), false);
+
+        vm.prank(owner);
+        streaming.pause();
+
+        assertEq(streaming.paused(), true);
     }
 
 }
@@ -761,6 +789,21 @@ contract StatePausedTest is StatePaused {
         streaming.claim(tokenIds);      
     }
 
+    function testUserCannotUnpause() public {
+
+        vm.expectRevert(abi.encodeWithSelector((Ownable.OwnableUnauthorizedAccount.selector), userA));
+
+        vm.prank(userA);
+        streaming.unpause();
+    }
+
+    function testOperatorCannotUnpause() public {
+                
+        vm.expectRevert(abi.encodeWithSelector((Ownable.OwnableUnauthorizedAccount.selector), operator));
+
+        vm.prank(operator);
+        streaming.unpause();
+    }
 
     function testCannotEmergencyExitIfNotFrozen() public {
 

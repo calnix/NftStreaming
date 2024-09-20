@@ -67,7 +67,7 @@ abstract contract StateDeploy is Test {
         token = new ERC20Mock();       
         nft = new MockNFT();
 
-        streaming = new NftStreaming(address(nft), address(token), owner, depositor, address(0), 
+        streaming = new NftStreaming(address(nft), address(token), owner, depositor, operator, address(0), 
                                     allocationPerNft, startTime, endTime);
 
         mockModule = new MockModuleContract(address(nft));
@@ -542,7 +542,7 @@ contract StateStreamEndedTest is StateStreamEnded {
         assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
     }
 
-    function testUserBCanClaim_T12() public {
+    function testUserBCanClaimViaModule_T12() public {
         // verify userB locked nft
         assertEq(nft.ownerOf(1), address(mockModule));
 
@@ -570,6 +570,256 @@ contract StateStreamEndedTest is StateStreamEnded {
         // check streaming contract: storage variables
         assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
 
+    }
+
+}
+
+//Note: t = endTime + 2 days: 14 days
+abstract contract StateStreamEndedPlusTwoDays is StateStreamEnded {
+    function setUp() public override virtual {
+        super.setUp(); 
+
+        vm.warp((endTime + 2 days));
+    }
+}
+
+contract StateStreamEndedPlusTwoDaysTest is StateStreamEndedPlusTwoDays {
+    
+    function testUserACanClaim_AfterStreamEnded() public {
+
+        uint256 userATokenBalance_before = token.balanceOf(userA);
+
+        vm.prank(userA);
+        streaming.claimSingle(0);     
+
+        uint256 userATokenBalance_after = token.balanceOf(userA);
+        
+        // eps
+        uint256 epsClaimable = 7 * streaming.emissionPerSecond();
+        
+        // check tokens transfers
+        assertEq(token.balanceOf(address(streaming)), (totalAllocation - totalClaimed - epsClaimable));
+        assertEq(userATokenBalance_before + epsClaimable, userATokenBalance_after);
+
+        // check streaming contract
+        (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(0);
+        assertEq(claimed, token.balanceOf(userA));
+        assertEq(lastClaimedTimestamp, streaming.endTime());
+
+        // check streaming contract: storage variables
+        assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
+    }
+
+    function testUserCCanClaimMultiple_AfterStreamEnded() public {
+        
+        // verify userC has both nfts
+        assertEq(nft.ownerOf(2), userC);
+        assertEq(nft.ownerOf(3), userC);
+
+        uint256[] memory tokenIds = new uint256[](2);
+            tokenIds[0] = 2;
+            tokenIds[1] = 3;
+        uint256[] memory amounts = new uint256[](2);
+            amounts[0] = 7 * streaming.emissionPerSecond();
+            amounts[1] = 7 * streaming.emissionPerSecond();
+
+        // before
+        uint256 userCTokenBalance_before = token.balanceOf(userC);
+
+        // check events
+        vm.expectEmit(true, true, true, true);
+        emit Claimed(userC, tokenIds, amounts);
+
+        vm.prank(userC);
+        streaming.claim(tokenIds);     
+
+        uint256 userCTokenBalance_after = token.balanceOf(userC);
+        uint256 epsClaimable = (7 * streaming.emissionPerSecond()) * 2;   // 2 nfts
+
+        // check tokens transfers
+        assertEq(token.balanceOf(address(streaming)), totalAllocation - totalClaimed - epsClaimable);
+        assertEq(userCTokenBalance_before + epsClaimable, userCTokenBalance_after);
+
+        // check streaming contract: tokenIds
+        for (uint256 i = tokenIds[0]; i < tokenIds.length; ++i) {
+
+            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
+
+            assertEq(claimed, epsClaimable/tokenIds.length);
+            assertEq(lastClaimedTimestamp, streaming.endTime());
+        }
+
+        // check streaming contract: storage variables
+        assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
+    }
+
+    function testUserBCanClaimViaModule_AfterStreamEnded() public {
+        // verify userB locked nft
+        assertEq(nft.ownerOf(1), address(mockModule));
+
+        uint256 tokenBalance_before = token.balanceOf(userB);
+
+        vm.prank(userB);
+            uint256[] memory tokenIds = new uint256[](1);
+            tokenIds[0] = 1;
+            streaming.claimViaModule(address(mockModule), tokenIds);
+
+        uint256 tokenBalance_after = token.balanceOf(userB);
+        
+        // eps
+        uint256 epsClaimable = 10 * streaming.emissionPerSecond();
+        
+        // check tokens transfers
+        assertEq(token.balanceOf(address(streaming)), (totalAllocation - totalClaimed - epsClaimable));
+        assertEq(tokenBalance_before + epsClaimable, tokenBalance_after);
+
+        // check streaming contract
+        (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(1);
+        assertEq(claimed, token.balanceOf(userB));
+        assertEq(lastClaimedTimestamp, streaming.endTime());
+
+        // check streaming contract: storage variables
+        assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
+
+    }
+
+}
+
+//Note: deadline is set -> endTime + 17 days
+abstract contract StateBeforeDeadline is StateStreamEndedPlusTwoDays {
+    
+    function setUp() public override virtual {
+        super.setUp(); 
+
+        vm.prank(owner);
+        streaming.updateDeadline(endTime + 17 days);
+    }
+}
+
+
+contract StateBeforeDeadlineTest is StateBeforeDeadline {
+
+    function testUserACanClaim_AfterStreamEnded() public {
+
+        uint256 userATokenBalance_before = token.balanceOf(userA);
+
+        vm.prank(userA);
+        streaming.claimSingle(0);     
+
+        uint256 userATokenBalance_after = token.balanceOf(userA);
+        
+        // eps
+        uint256 epsClaimable = 7 * streaming.emissionPerSecond();
+        
+        // check tokens transfers
+        assertEq(token.balanceOf(address(streaming)), (totalAllocation - totalClaimed - epsClaimable));
+        assertEq(userATokenBalance_before + epsClaimable, userATokenBalance_after);
+
+        // check streaming contract
+        (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(0);
+        assertEq(claimed, token.balanceOf(userA));
+        assertEq(lastClaimedTimestamp, streaming.endTime());
+
+        // check streaming contract: storage variables
+        assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
+    }
+
+    function testUserCCanClaimMultiple_AfterStreamEnded() public {
+        
+        // verify userC has both nfts
+        assertEq(nft.ownerOf(2), userC);
+        assertEq(nft.ownerOf(3), userC);
+
+        uint256[] memory tokenIds = new uint256[](2);
+            tokenIds[0] = 2;
+            tokenIds[1] = 3;
+        uint256[] memory amounts = new uint256[](2);
+            amounts[0] = 7 * streaming.emissionPerSecond();
+            amounts[1] = 7 * streaming.emissionPerSecond();
+
+        // before
+        uint256 userCTokenBalance_before = token.balanceOf(userC);
+
+        // check events
+        vm.expectEmit(true, true, true, true);
+        emit Claimed(userC, tokenIds, amounts);
+
+        vm.prank(userC);
+        streaming.claim(tokenIds);     
+
+        uint256 userCTokenBalance_after = token.balanceOf(userC);
+        uint256 epsClaimable = (7 * streaming.emissionPerSecond()) * 2;   // 2 nfts
+
+        // check tokens transfers
+        assertEq(token.balanceOf(address(streaming)), totalAllocation - totalClaimed - epsClaimable);
+        assertEq(userCTokenBalance_before + epsClaimable, userCTokenBalance_after);
+
+        // check streaming contract: tokenIds
+        for (uint256 i = tokenIds[0]; i < tokenIds.length; ++i) {
+
+            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
+
+            assertEq(claimed, epsClaimable/tokenIds.length);
+            assertEq(lastClaimedTimestamp, streaming.endTime());
+        }
+
+        // check streaming contract: storage variables
+        assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
+    }
+
+    function testUserBCanClaimViaModule_AfterStreamEnded() public {
+        // verify userB locked nft
+        assertEq(nft.ownerOf(1), address(mockModule));
+
+        uint256 tokenBalance_before = token.balanceOf(userB);
+
+        vm.prank(userB);
+            uint256[] memory tokenIds = new uint256[](1);
+            tokenIds[0] = 1;
+            streaming.claimViaModule(address(mockModule), tokenIds);
+
+        uint256 tokenBalance_after = token.balanceOf(userB);
+        
+        // eps
+        uint256 epsClaimable = 10 * streaming.emissionPerSecond();
+        
+        // check tokens transfers
+        assertEq(token.balanceOf(address(streaming)), (totalAllocation - totalClaimed - epsClaimable));
+        assertEq(tokenBalance_before + epsClaimable, tokenBalance_after);
+
+        // check streaming contract
+        (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(1);
+        assertEq(claimed, token.balanceOf(userB));
+        assertEq(lastClaimedTimestamp, streaming.endTime());
+
+        // check streaming contract: storage variables
+        assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
+
+    }
+
+}
+
+
+//Note: warp to after deadline
+abstract contract StateAfterDeadline is StateBeforeDeadline {
+    
+    function setUp() public override virtual {
+        super.setUp(); 
+
+        vm.warp((endTime + 18 days));
+    }
+}
+
+contract StateAfterDeadlineTest is StateAfterDeadline {
+
+    function testCannotClaimViaModulefterDeadline() public {
+        
+        vm.expectRevert(abi.encodeWithSelector(DeadlineExceeded.selector));
+
+        vm.prank(userB);
+            uint256[] memory tokenIds = new uint256[](1);
+            tokenIds[0] = 1;
+        streaming.claimViaModule(address(mockModule), tokenIds);
     }
 
 }
