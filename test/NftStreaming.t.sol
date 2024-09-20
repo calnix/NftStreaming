@@ -96,9 +96,25 @@ contract StateDeployTest is StateDeploy {
         assertEq(calculatedEPS, streaming.emissionPerSecond());
     }
 
-    function testCanDeposit() public {
+    function testUsersCannotDeposit() public {
+        
+        vm.expectRevert(abi.encodeWithSelector(OnlyDepositor.selector));
+
+        vm.prank(userA);
+        streaming.deposit(totalAllocation);
+    }
+
+    function testDepositorCanDeposit() public {
+
+        assertEq(streaming.totalDeposited(), 0);
+
+        vm.expectEmit(true, true, true, true);
+        emit Deposited(depositor, totalAllocation);
+
         vm.prank(depositor);
         streaming.deposit(totalAllocation);
+
+        assertEq(streaming.totalDeposited(), totalAllocation);
     }
 }
 
@@ -147,6 +163,18 @@ contract StateStreamingStartedTest is StateStreamingStarted {
 
         vm.prank(userA);
         streaming.claimSingle(0);     
+    }
+
+    function testCannnotClaimMultipleOnStart() public {
+
+        uint256[] memory tokenIds = new uint256[](2);
+            tokenIds[0] = 2;
+            tokenIds[1] = 3;
+        
+        vm.expectRevert(abi.encodeWithSelector(NotStarted.selector));
+
+        vm.prank(userC);
+        streaming.claim(tokenIds);     
     }
 
 }
@@ -424,7 +452,7 @@ contract StateStreamEndedTest is StateStreamEnded {
 
 }
 
-//Note: t = endTime + 2 days
+//Note: t = endTime + 2 days: 14 days
 abstract contract StateStreamEndedPlusTwoDays is StateStreamEnded {
     function setUp() public override virtual {
         super.setUp(); 

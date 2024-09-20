@@ -107,9 +107,25 @@ contract StateDeployTest is StateDeploy {
         assertEq(calculatedEPS, streaming.emissionPerSecond());
     }
 
-    function testCanDeposit() public {
+    function testUsersCannotDeposit() public {
+        
+        vm.expectRevert(abi.encodeWithSelector(OnlyDepositor.selector));
+
+        vm.prank(userA);
+        streaming.deposit(totalAllocation);
+    }
+
+    function testDepositorCanDeposit() public {
+
+        assertEq(streaming.totalDeposited(), 0);
+
+        vm.expectEmit(true, true, true, true);
+        emit Deposited(depositor, totalAllocation);
+
         vm.prank(depositor);
         streaming.deposit(totalAllocation);
+
+        assertEq(streaming.totalDeposited(), totalAllocation);
     }
 }
 
@@ -130,11 +146,13 @@ abstract contract StateDeposited is StateDeploy {
 contract StateDepositedTest is StateDeposited {
 
     function testUserACannotClaim() public {
+        uint256[] memory tokenIds = new uint256[](1);
+            tokenIds[0] = 0;
 
         vm.expectRevert(abi.encodeWithSelector(NotStarted.selector));
 
         vm.prank(userA);
-        streaming.claimSingle(0);     
+        streaming.claimViaModule(address(mockModule), tokenIds);
     }
 
     function testOwnerCanSetModule() public {

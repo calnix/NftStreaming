@@ -158,6 +158,7 @@ abstract contract SimulateUsersAndDelegations is ForkMainnet {
     }
 }
 
+//Note: Delegation sanity checks
 contract SimulateUsersAndDelegationsTest is SimulateUsersAndDelegations {
 
     function testUserColdWalletOwnership() public {
@@ -261,8 +262,16 @@ contract StateDeployTest is StateDeploy {
 
         assertEq(calculatedEPS, streaming.emissionPerSecond());
     }
+    
+    function testUsersCannotDeposit() public {
+        
+        vm.expectRevert(abi.encodeWithSelector(OnlyDepositor.selector));
 
-    function testCanDeposit() public {
+        vm.prank(userA);
+        streaming.deposit(totalAllocation);
+    }
+
+    function testDepositorCanDeposit() public {
         vm.prank(depositor);
         streaming.deposit(totalAllocation);
     }
@@ -287,12 +296,14 @@ contract StateDepositedTest is StateDeposited {
 
     function testUserACannotClaim() public {
 
+        uint256[] memory tokenIds = new uint256[](1);
+            tokenIds[0] = 0;
+        
         vm.expectRevert(abi.encodeWithSelector(NotStarted.selector));
-
+            
         vm.prank(userA);
-        streaming.claimSingle(0);     
+        streaming.claimDelegated(tokenIds); 
     }
-
 }
 
 
