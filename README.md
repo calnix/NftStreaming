@@ -102,7 +102,6 @@ Only the contract can change this depositor address; if needed.
 - pause: pause contract; all claims paused
 - unpause: unpause contract
 
-
 ### updateDeadline
 
 The deadline variable can only be minimally a value 14 days past the defined endTime.
@@ -110,8 +109,6 @@ The deadline variable can only be minimally a value 14 days past the defined end
 ```solidity
         if (newDeadline < endTime + 14 days) revert InvalidNewDeadline();
 ```
-
-> Add operator role for some functions?
 
 ## Emergency
 

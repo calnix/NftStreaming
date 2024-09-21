@@ -70,8 +70,11 @@ contract NftStreaming is Pausable, Ownable2Step {
         bool isPaused;
     }
 
+    // Streams 
     mapping(uint256 tokenId => Stream stream) public streams;
-    mapping(address module => bool isRegistered) public modules;    // Trusted contracts to call
+    
+    // Trusted contracts to call
+    mapping(address module => bool isRegistered) public modules;    
 
     constructor(
         address nft, address token, address owner, address depositor_, address operator_, address delegateRegistry,
@@ -108,7 +111,12 @@ contract NftStreaming is Pausable, Ownable2Step {
                                  USERS
     //////////////////////////////////////////////////////////////*/
 
-    function claimSingle(uint256 tokenId) external payable whenStartedAndBeforeDeadline whenNotPaused {
+    /**
+     * @notice Users to claim for a single Nft
+     * @dev msg.sender must be owner of Nft
+     * @param tokenId Nft's tokenId
+     */
+    function claimSingle(uint256 tokenId) external whenStartedAndBeforeDeadline whenNotPaused {
         if(block.timestamp < startTime) revert NotStarted();
 
         // check that deadline as not been exceeded; if deadline has been defined
@@ -133,8 +141,12 @@ contract NftStreaming is Pausable, Ownable2Step {
         TOKEN.safeTransfer(msg.sender, claimable);        
     }
 
-    // if nfts in wallet
-    function claim(uint256[] calldata tokenIds) external payable whenStartedAndBeforeDeadline whenNotPaused {
+    /**
+     * @notice Users to claim for multiple Nfts
+     * @dev msg.sender must be owner of all Nfts
+     * @param tokenIds Nfts' tokenId
+     */    
+    function claim(uint256[] calldata tokenIds) external whenStartedAndBeforeDeadline whenNotPaused {
         
         // array validation
         uint256 tokenIdsLength = tokenIds.length;
@@ -168,8 +180,12 @@ contract NftStreaming is Pausable, Ownable2Step {
         TOKEN.safeTransfer(msg.sender, totalAmount);      
     }
 
-    // if nft is delegated
-    function claimDelegated(uint256[] calldata tokenIds) external payable whenStartedAndBeforeDeadline whenNotPaused {
+    /**
+     * @notice Users to claim via delegated hot wallets
+     * @dev msg.sender is designated delegate of nfts
+     * @param tokenIds Nfts' tokenId
+     */  
+    function claimDelegated(uint256[] calldata tokenIds) external whenStartedAndBeforeDeadline whenNotPaused {
         
         // array validation
         uint256 tokenIdsLength = tokenIds.length;
@@ -233,7 +249,7 @@ contract NftStreaming is Pausable, Ownable2Step {
     }
 
     // if nft is on some contract (e.g. staking pro)
-    function claimViaModule(address module, uint256[] calldata tokenIds) external payable whenStartedAndBeforeDeadline whenNotPaused {
+    function claimViaModule(address module, uint256[] calldata tokenIds) external whenStartedAndBeforeDeadline whenNotPaused {
         if(module == address(0)) revert ZeroAddress();      // in-case someone fat-fingers and allows zero address in modules mapping
 
         // array validation
@@ -331,7 +347,7 @@ contract NftStreaming is Pausable, Ownable2Step {
      * @dev By default deadline = 0 
      * @param newDeadline must be after last claim round + 14 days
      */
-    function updateDeadline(uint256 newDeadline) external payable onlyOwner {
+    function updateDeadline(uint256 newDeadline) external onlyOwner {
 
         // allow for 14 days buffer: prevent malicious premature ending
         // if the newDeadline is in the past: can insta-withdraw w/o informing users
@@ -347,17 +363,19 @@ contract NftStreaming is Pausable, Ownable2Step {
      * @dev Depositor role allows calling of deposit and withdraw fns
      * @param newDepositor new address
      */
-    function updateDepositor(address newDepositor) external payable onlyOwner {
+    function updateDepositor(address newDepositor) external onlyOwner {
+        
         address oldDepositor = depositor;
-
         depositor = newDepositor;
 
         emit DepositorUpdated(oldDepositor, newDepositor);
     }
 
     /**
-     * @notice
-     * @dev Add or remove a module
+     * @notice Enable or disable a module. Only Owner.
+     * @dev Module is expected to implement fn 'streamingOwnerCheck(address,uint256[])'
+     * @param module Address of contract
+     * @param set True - enable | False - disable
      */ 
     function updateModule(address module, bool set) external onlyOwner {
         
@@ -369,6 +387,7 @@ contract NftStreaming is Pausable, Ownable2Step {
     /**
      * @notice Owner to update operator role
      * @dev Can be set to address(0) to eliminiate the role
+     * @param newOperator new operator address
      */ 
     function updateOperator(address newOperator) external onlyOwner {
         
@@ -380,6 +399,7 @@ contract NftStreaming is Pausable, Ownable2Step {
 
     /**
      * @notice Owner or operator can pause streams
+     * @param tokenIds Nfts' tokenId
      */ 
     function pauseStreams(uint256[] calldata tokenIds) external {
         
@@ -451,7 +471,7 @@ contract NftStreaming is Pausable, Ownable2Step {
 
     /**
      * @notice Depositor to withdraw all unclaimed tokens past the specified deadline
-     * @dev Only possible if deadline has been defined and exceeded
+     * @dev Only possible if deadline is non-zero and exceeded
      */
     function withdraw() external whenNotPaused {
         if(msg.sender != depositor) revert OnlyDepositor(); 
@@ -492,7 +512,7 @@ contract NftStreaming is Pausable, Ownable2Step {
 
     /**
      * @notice Unpause claim. Cannot unpause once frozen
-     * @dev Only owner can unpause.
+     * @dev Only owner can unpause
      */
     function unpause() external onlyOwner whenPaused {
         if(isFrozen == 1) revert IsFrozen(); 
@@ -555,5 +575,28 @@ contract NftStreaming is Pausable, Ownable2Step {
         _;
     }
 
+
+
+    /*//////////////////////////////////////////////////////////////
+                                  VIEW
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     * @notice Returns claimable amount for specified tokenId
+     * @param tokenIds Nft's tokenId
+     */ 
+    function claimable(uint256 tokenId) external view returns(uint256) {
+        
+        // get data
+        Stream memory stream = streams[tokenId];
+
+        // nothing to claim
+        if(stream.lastClaimedTimestamp == block.timestamp) return(0);
+
+        // calc. claimable
+        (uint256 claimable, uint256 currentTimestamp) = _calculateClaimable(stream.lastClaimedTimestamp);
+
+        return claimable;
+    }
 
 }
