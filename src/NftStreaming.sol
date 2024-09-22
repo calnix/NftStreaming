@@ -7,6 +7,7 @@ import {SafeERC20, IERC20} from "./../lib/openzeppelin-contracts/contracts/token
 import {Ownable2Step, Ownable} from "openzeppelin-contracts/contracts/access/Ownable2Step.sol";
 import {Pausable} from "openzeppelin-contracts/contracts/utils/Pausable.sol";
 
+import {IModule} from "./IModule.sol";
 import {IDelegateRegistry} from "./IDelegateRegistry.sol";
 
 import "./Events.sol";
@@ -27,7 +28,7 @@ contract NftStreaming is Pausable, Ownable2Step {
     IERC20 public immutable TOKEN;
 
     // external 
-    IDelegateRegistry public DELEGATE_REGISTRY;  // https://docs.delegate.xyz/technical-documentation/delegate-registry/contract-addresses
+    IDelegateRegistry public immutable DELEGATE_REGISTRY;  // https://docs.delegate.xyz/technical-documentation/delegate-registry/contract-addresses
 
     // total supply of NFTs
     uint256 public constant totalSupply = 8_888;
@@ -85,8 +86,11 @@ contract NftStreaming is Pausable, Ownable2Step {
         if(endTime_ <= startTime_) revert InvalidEndTime(); 
         if(allocationPerNft_ == 0) revert InvalidAllocation();
 
-        // calculate emissionPerSecond
+        // ensure no underflow: if remainder, solidity will round down
         uint256 period = endTime_ - startTime_; 
+        if(allocationPerNft_ % period != 0) revert InvalidAllocation();
+        
+        // calculate emissionPerSecond
         uint256 emissionPerSecond_ = allocationPerNft_ / period; 
         if(emissionPerSecond_ == 0) revert InvalidEmission();
 
@@ -104,7 +108,6 @@ contract NftStreaming is Pausable, Ownable2Step {
 
         allocationPerNft = allocationPerNft_;        
         totalAllocation = allocationPerNft_ * totalSupply;
-
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -117,15 +120,7 @@ contract NftStreaming is Pausable, Ownable2Step {
      * @param tokenId Nft's tokenId
      */
     function claimSingle(uint256 tokenId) external whenStartedAndBeforeDeadline whenNotPaused {
-        if(block.timestamp < startTime) revert NotStarted();
 
-        // check that deadline as not been exceeded; if deadline has been defined
-        if(deadline > 0) {
-            if (block.timestamp > deadline) {
-                revert DeadlineExceeded();
-            }
-        }
-        
         // validate ownership
         address ownerOf = NFT.ownerOf(tokenId);
         if(msg.sender != ownerOf) revert InvalidOwner();  
@@ -248,7 +243,12 @@ contract NftStreaming is Pausable, Ownable2Step {
 
     }
 
-    // if nft is on some contract (e.g. staking pro)
+    /**
+     * @notice Users to claim, if nft is locked on some contract (e.g. staking pro)
+     * @dev Owner must have enabled module address
+     * @param module Nfts' tokenId
+     * @param tokenIds Nfts' tokenId
+     */  
     function claimViaModule(address module, uint256[] calldata tokenIds) external whenStartedAndBeforeDeadline whenNotPaused {
         if(module == address(0)) revert ZeroAddress();      // in-case someone fat-fingers and allows zero address in modules mapping
 
@@ -260,12 +260,8 @@ contract NftStreaming is Pausable, Ownable2Step {
         if(!modules[module]) revert UnregisteredModule(); 
 
         // check ownership via moduleCall
-        bytes memory data = abi.encodeWithSignature("streamingOwnerCheck(address,uint256[])", msg.sender, tokenIds);
-        (bool success, /*bytes memory result*/) = module.staticcall(data);
-
         // if not msg.sender is not owner, execution expected to revert within module;
-        // success == false
-        if(!success) revert ModuleCheckFailed();       
+        IModule(module).streamingOwnerCheck(msg.sender, tokenIds);
 
         uint256 totalAmount;
         uint256[] memory amounts = new uint256[](tokenIdsLength);
@@ -294,6 +290,7 @@ contract NftStreaming is Pausable, Ownable2Step {
                                 INTERNAL
     //////////////////////////////////////////////////////////////*/
 
+    //note: safeCast not used in downcasting, since the max value of uint128 will not be hit for moca token
     function _updateLastClaimed(uint256 tokenId) internal returns(uint256) {
         
         // get data
@@ -305,18 +302,23 @@ contract NftStreaming is Pausable, Ownable2Step {
         // stream ended: return
         if(stream.lastClaimedTimestamp == endTime) return(0);
 
-        //note: check paused
+        // stream paused: revert
         if(stream.isPaused) revert StreamPaused();
 
         //calc claimable
         (uint256 claimable, uint256 currentTimestamp) = _calculateClaimable(stream.lastClaimedTimestamp);
 
-        // sanity check: ensure does not exceed max
-        if(claimable > allocationPerNft) revert IncorrectClaimable();
-
         // update timestamp + claimed
+        
+        /** Note:
+            uint128 max value: 340,282,366,920,938,463,463,374,607,431,768,211,455 [340 undecillion]
+            moca supply capped at 8,888,888,888
+         */
         stream.lastClaimedTimestamp = uint128(currentTimestamp);
         stream.claimed += uint128(claimable);
+
+        // sanity check: ensure does not exceed max
+        if(stream.claimed > allocationPerNft) revert IncorrectClaimable();
 
         // update storage
         streams[tokenId] = stream;
@@ -574,7 +576,7 @@ contract NftStreaming is Pausable, Ownable2Step {
 
         _;
     }
-
+  
 
 
     /*//////////////////////////////////////////////////////////////
@@ -583,7 +585,7 @@ contract NftStreaming is Pausable, Ownable2Step {
 
     /**
      * @notice Returns claimable amount for specified tokenId
-     * @param tokenIds Nft's tokenId
+     * @param tokenId Nft's tokenId
      */ 
     function claimable(uint256 tokenId) external view returns(uint256) {
         
@@ -594,7 +596,7 @@ contract NftStreaming is Pausable, Ownable2Step {
         if(stream.lastClaimedTimestamp == block.timestamp) return(0);
 
         // calc. claimable
-        (uint256 claimable, uint256 currentTimestamp) = _calculateClaimable(stream.lastClaimedTimestamp);
+        (uint256 claimable, /*uint256 currentTimestamp*/) = _calculateClaimable(stream.lastClaimedTimestamp);
 
         return claimable;
     }
