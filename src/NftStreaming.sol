@@ -201,31 +201,27 @@ contract NftStreaming is Pausable, Ownable2Step {
             data[i] = abi.encodeCall(DELEGATE_REGISTRY.checkDelegateForERC721, 
                         (msg.sender, nftOwner, address(NFT), tokenId, ""));
         }
-
+        
+        // if a tokenId is not delegated will return false; as a bool
         bytes[] memory results = DELEGATE_REGISTRY.multicall(data);
 
-        // if a tokenId is not delegated will return false; as a bool
+        uint256 totalAmount;
+        uint256[] memory amounts = new uint256[](tokenIdsLength);
+
         for (uint256 i = 0; i < tokenIdsLength; ++i) {
             
             // multiCall uses delegateCall: decode return data
             bool isDelegated = abi.decode(results[i], (bool));
-            
             if(!isDelegated) revert InvalidDelegate();
-        }
 
-        // update claims
-        uint256 totalAmount;
-        uint256[] memory amounts = new uint256[](tokenIdsLength);
-        for (uint256 i = 0; i < tokenIdsLength; ++i) {
-            
+            // update tokenId
             uint256 tokenId = tokenIds[i];
-                
             uint256 claimable = _updateLastClaimed(tokenId);
-                
+            
             totalAmount += claimable;
             amounts[i] = claimable;
         }
-        
+       
         // update totalClaimed
         totalClaimed += totalAmount;
 
@@ -290,7 +286,8 @@ contract NftStreaming is Pausable, Ownable2Step {
                                 INTERNAL
     //////////////////////////////////////////////////////////////*/
 
-    //note: safeCast not used in downcasting, since the max value of uint128 will not be hit for moca token
+    //note: safeCast not used in downcasting, since overflowing uint128 is not possible in this use case
+    //      modify accordingly to your use case     
     function _updateLastClaimed(uint256 tokenId) internal returns(uint256) {
         
         // get data
