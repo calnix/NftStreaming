@@ -10,8 +10,8 @@ All NFTs get the same amount streamed.
 
 ## Delegation of NFTs
 
-- Expect users to be delegating via the function: `delegateAll(hotWallet, bytes32(0), true)`  or `??????????????`
-- Hence, the delegation check is done via: `checkDelegateForERC721(hw1, cw, nftAddress, tokenId, "")`
+- Expect users to be delegating via the function: `delegateAll(hotWallet, bytes32(0), true)` or `delegateERC721(hotWallet, address(mocaNft), tokenId, bytes32(0), true)`
+- Hence, the delegation check is done via: `checkDelegateForERC721(hw, cw, nftAddress, tokenId, "")`
 
 ## Roles
 
@@ -49,7 +49,6 @@ Contract allows a specific stream to be paused indefinitely.
 - Useful in scenarios where some users' NFTs have been compromised and extracted.
 - Pausing prevents the hacker from benefitting from the stream.
 - Indefinitely paused streams would subsequently be unclaimable once the deadline (if defined) has been exceeded.
-
 
 ## Modules
 
@@ -119,3 +118,11 @@ The deadline variable can only be minimally a value 14 days past the defined end
 Owner can set a target address to receive the emergency withdrawal of tokens.
 
 Withdrawal amount is reference via token contract's balanceOf method as we cannot be sure if `totalDeposited` and `totalClaimed` remain accurate at such a time.
+
+## Others
+
+1. `_updateLastClaimed`
+
+- downcasts currentTimestamp and claimable to uint128 without SafeCast
+- uint128 max value: 340,282,366,920,938,463,463,374,607,431,768,211,455 [340 undecillion]
+- expectation is that that neither token supply nor timestamp will exceed this value
