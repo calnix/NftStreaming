@@ -280,7 +280,7 @@ contract StateT03Test is StateT03 {
         assertEq(streaming.totalClaimed(), epsClaimable);
     }
 
-        function testCannotClaimMultipleRepeatedly() public {
+    function testCannotClaimMultipleRepeatedly() public {
 
         uint256[] memory tokenIds = new uint256[](3);
             tokenIds[0] = 2;
