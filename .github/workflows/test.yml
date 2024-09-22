@@ -1,5 +1,8 @@
 name: CI
 
+env:
+  MAINNET_RPC_URL: ${{ secrets.MAINNET_RPC_URL }}
+  
 on:
   push:
   pull_request:
