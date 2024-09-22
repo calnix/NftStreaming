@@ -352,7 +352,7 @@ abstract contract StateT03 is StateStreamingStarted {
 contract StateT03Test is StateT03 {
 
     // check that DELEGATE_REGISTRY.multicall(data) reverts
-    function testIncorrectDelegateCanClaim() public {
+    function testIncorrectDelegateCannotClaim() public {
         //claimable
         uint256 epsClaimable = streaming.emissionPerSecond();
 
@@ -473,6 +473,60 @@ contract StateT03Test is StateT03 {
         assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
     }
 
+    function testCannotClaimDelegatedRepeatedly() public {
+        // claimable
+        uint256 epsClaimable = 2 * streaming.emissionPerSecond();   // 2 nfts
+
+        //------------ arrays        
+        uint256[] memory tokenIds = new uint256[](3);
+            tokenIds[0] = 2;
+            tokenIds[1] = 3;
+            tokenIds[2] = 2;
+
+        address[] memory owners = new address[](tokenIds.length);
+            owners[0] = userC_cw;
+            owners[1] = userC_cw;
+            owners[2] = userC_cw;
+
+        uint256[] memory amounts = new uint256[](tokenIds.length);
+            amounts[0] = streaming.emissionPerSecond();
+            amounts[1] = streaming.emissionPerSecond();
+            amounts[2] = 0;
+
+        // ---------------------------------------------------
+
+        // before balance
+        uint256 userCTokenBalance_before = token.balanceOf(userC);
+        uint256 userCCwTokenBalance_before = token.balanceOf(userC_cw);
+
+        // check events
+        vm.expectEmit(true, true, true, true);
+        emit ClaimedByDelegate(userC, owners, tokenIds, amounts);
+
+        vm.prank(userC);
+        streaming.claimDelegated(tokenIds);
+
+        // after balances
+        uint256 userCTokenBalance_after = token.balanceOf(userC);
+        uint256 userCCwTokenBalance_after = token.balanceOf(userC_cw);
+
+        // check tokens transfers
+        assertEq(token.balanceOf(address(streaming)), totalAllocation - epsClaimable);
+        assertEq(userCTokenBalance_before, userCTokenBalance_after);
+        assertEq(userCCwTokenBalance_before + epsClaimable, userCCwTokenBalance_after);
+
+        // check streaming contract: tokenIds
+        for (uint256 i = tokenIds[0]; i < tokenIds.length; ++i) {
+
+            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
+
+            assertEq(claimed, streaming.emissionPerSecond());
+            assertEq(lastClaimedTimestamp, block.timestamp);
+        }
+
+        // check streaming contract: storage variables
+        assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
+    }
 }
 
 

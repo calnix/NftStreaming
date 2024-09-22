@@ -286,8 +286,7 @@ contract NftStreaming is Pausable, Ownable2Step {
                                 INTERNAL
     //////////////////////////////////////////////////////////////*/
 
-    //note: safeCast not used in downcasting, since overflowing uint128 is not possible in this use case
-    //      modify accordingly to your use case     
+    //note: safeCast not used in downcasting, since overflowing uint128 is not expected
     function _updateLastClaimed(uint256 tokenId) internal returns(uint256) {
         
         // get data
@@ -307,9 +306,9 @@ contract NftStreaming is Pausable, Ownable2Step {
 
         // update timestamp + claimed
         
-        /** Note:
+        /** Note: 
             uint128 max value: 340,282,366,920,938,463,463,374,607,431,768,211,455 [340 undecillion]
-            moca supply capped at 8,888,888,888
+            If token supply is >= 340 undecillion, SafeCast should be used
          */
         stream.lastClaimedTimestamp = uint128(currentTimestamp);
         stream.claimed += uint128(claimable);
@@ -329,7 +328,6 @@ contract NftStreaming is Pausable, Ownable2Step {
         uint256 currentTimestamp = block.timestamp > endTime ? endTime : block.timestamp;
         // lastClaimedTimestamp >= startTime
         uint256 lastClaimedTimestamp = lastClaimedTimestamp < startTime ? startTime : lastClaimedTimestamp;
-
 
         uint256 timeDelta = currentTimestamp - lastClaimedTimestamp;
         uint256 claimable = emissionPerSecond * timeDelta;

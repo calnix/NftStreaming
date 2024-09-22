@@ -221,6 +221,28 @@ abstract contract StateT03 is StateStreamingStarted {
 
 contract StateT03Test is StateT03 {
 
+    function testZeroAddressCannotClaimViaModule() public {
+        uint256[] memory tokenIds = new uint256[](2);
+            tokenIds[0] = 2;
+            tokenIds[1] = 3;
+
+        vm.expectRevert(abi.encodeWithSelector(ZeroAddress.selector));
+
+        vm.prank(userC);
+        streaming.claimViaModule(address(0), tokenIds);
+    }
+
+    function testWrongUserCannotClaimViaModule() public {
+        uint256[] memory tokenIds = new uint256[](2);
+            tokenIds[0] = 2;
+            tokenIds[1] = 3;
+
+        vm.expectRevert("Incorrect Owner");
+
+        vm.prank(userB);
+        streaming.claimViaModule(address(mockModule), tokenIds);
+    }
+
     //can call claim; 1 second of emissions claimable
     function testUserACanClaim_T03() public {
 
@@ -427,6 +449,51 @@ contract StateT05Test is StateT05 {
             (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
 
             assertEq(claimed, epsClaimable/tokenIds.length);
+            assertEq(lastClaimedTimestamp, block.timestamp);
+        }
+
+        // check streaming contract: storage variables
+        assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
+    }
+
+    function testCannotClaimViaModuleRepeatedly() public {
+        
+        // verify userC's nft on module contract
+        assertEq(nft.ownerOf(3), address(mockModule));
+        assertEq(mockModule.nfts(3), userC);
+        assertEq(streaming.modules(address(mockModule)), true);
+
+        uint256[] memory tokenIds = new uint256[](2);
+            tokenIds[0] = 3;
+            tokenIds[1] = 3;
+
+        uint256[] memory amounts = new uint256[](2);
+            amounts[0] = 2 * streaming.emissionPerSecond();
+            amounts[1] = 0;
+
+        // before
+        uint256 userCTokenBalance_before = token.balanceOf(userC);
+
+        // check events
+        vm.expectEmit(true, true, true, true);
+        emit ClaimedByModule(address(mockModule), tokenIds, amounts);
+
+        vm.prank(userC);
+        streaming.claimViaModule(address(mockModule), tokenIds);
+
+        uint256 userCTokenBalance_after = token.balanceOf(userC);
+        uint256 epsClaimable = amounts[0];   // 1 nfts
+
+        // check tokens transfers
+        assertEq(token.balanceOf(address(streaming)), totalAllocation - totalClaimed - epsClaimable);
+        assertEq(userCTokenBalance_before + epsClaimable, userCTokenBalance_after);
+
+        // check streaming contract: tokenIds
+        for (uint256 i = tokenIds[0]; i < tokenIds.length; ++i) {
+
+            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
+
+            assertEq(claimed, amounts[0]);
             assertEq(lastClaimedTimestamp, block.timestamp);
         }
 

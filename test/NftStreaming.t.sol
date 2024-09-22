@@ -194,6 +194,25 @@ abstract contract StateT03 is StateStreamingStarted {
 
 contract StateT03Test is StateT03 {
 
+    function testWrongUserCannotClaimSingle() public {
+
+        vm.expectRevert(abi.encodeWithSelector(InvalidOwner.selector));
+
+        vm.prank(userB);
+        streaming.claimSingle(0);   
+    }
+
+    function testWrongUserCannotClaimMultiple() public {
+        uint256[] memory tokenIds = new uint256[](2);
+            tokenIds[0] = 2;
+            tokenIds[1] = 3;
+
+        vm.expectRevert(abi.encodeWithSelector(InvalidOwner.selector));
+
+        vm.prank(userB);
+        streaming.claim(tokenIds);     
+    }
+
     //can call claim; 1 second of emissions claimable
     function testUserACanClaim_T03() public {
 
@@ -261,6 +280,56 @@ contract StateT03Test is StateT03 {
         assertEq(streaming.totalClaimed(), epsClaimable);
     }
 
+        function testCannotClaimMultipleRepeatedly() public {
+
+        uint256[] memory tokenIds = new uint256[](3);
+            tokenIds[0] = 2;
+            tokenIds[1] = 3;
+            tokenIds[2] = 2;    //note: repeated
+
+        uint256[] memory amounts = new uint256[](3);
+            amounts[0] = streaming.emissionPerSecond();
+            amounts[1] = streaming.emissionPerSecond();
+            amounts[2] = 0;
+
+        // before
+        uint256 userCTokenBalance_before = token.balanceOf(userC);
+
+        // check events
+        vm.expectEmit(true, true, true, true);
+        emit Claimed(userC, tokenIds, amounts);
+
+        vm.prank(userC);
+        streaming.claim(tokenIds);     
+
+        uint256 userCTokenBalance_after = token.balanceOf(userC);
+        uint256 epsClaimable = 2 * streaming.emissionPerSecond();   // 2 nfts
+
+        // check tokens transfers
+        assertEq(token.balanceOf(address(streaming)), totalAllocation - epsClaimable);
+        assertEq(userCTokenBalance_before + epsClaimable, userCTokenBalance_after);
+
+        // check streaming contract: tokenIds
+        for (uint256 i = tokenIds[0]; i < tokenIds.length; ++i) {
+
+            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
+
+            assertEq(claimed, streaming.emissionPerSecond());
+            assertEq(lastClaimedTimestamp, block.timestamp);
+        }
+
+        // check streaming contract: storage variables
+        assertEq(streaming.totalClaimed(), epsClaimable); 
+
+    }
+
+    function testClaimableViewFunctionUserB_T03() public {
+        
+        uint256 claimable = streaming.claimable(1);
+
+        assertEq(claimable, streaming.emissionPerSecond());
+    }
+    
 }
 
 //Note: t = 5 | 3 eps streamed in total
@@ -353,6 +422,23 @@ contract StateT05Test is StateT05 {
 
         // check streaming contract: storage variables
         assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
+    }
+
+    //2 seconds of emissions claimable | 1 eps claimed
+    function testClaimableUserA_T05() public {
+
+        uint256 claimable = streaming.claimable(0);
+
+        assertEq(claimable, 2*streaming.emissionPerSecond());
+    }
+
+
+    //3 seconds of emissions claimable
+    function testClaimableUserB_T05() public {
+        
+        uint256 claimable = streaming.claimable(1);
+
+        assertEq(claimable, 3*streaming.emissionPerSecond());
     }
 }
 
@@ -448,6 +534,23 @@ contract StateStreamEndedTest is StateStreamEnded {
 
         // check streaming contract: storage variables
         assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
+    }
+
+    // userA prev. claimed: 3eps | 7 eps claimable
+    function testClaimableUserA_T05() public {
+
+        uint256 claimable = streaming.claimable(0);
+
+        assertEq(claimable, 7*streaming.emissionPerSecond());
+    }
+
+
+    // 10 eps claimable
+    function testClaimableUserB_T05() public {
+        
+        uint256 claimable = streaming.claimable(1);
+
+        assertEq(claimable, 10*streaming.emissionPerSecond());
     }
 
 }
