@@ -38,8 +38,8 @@ contract NftStreaming is Pausable, Ownable2Step {
     uint256 public immutable endTime;
     
     // allocation
-    uint256 public immutable allocationPerNft;
-    uint256 public immutable emissionPerSecond; // per NFT
+    uint256 public immutable allocationPerNft;    // expressed together with appropriate decimal precision [1 ether -> 1e18]
+    uint256 public immutable emissionPerSecond;   // per NFT
     uint256 public immutable totalAllocation;
 
     // financing
@@ -86,13 +86,19 @@ contract NftStreaming is Pausable, Ownable2Step {
         if(endTime_ <= startTime_) revert InvalidEndTime(); 
         if(allocationPerNft_ == 0) revert InvalidAllocation();
 
-        // ensure no underflow: if remainder, solidity will round down
-        uint256 period = endTime_ - startTime_; 
-        if(allocationPerNft_ % period != 0) revert InvalidAllocation();
-        
         // calculate emissionPerSecond
+        uint256 period = endTime_ - startTime_;       
         uint256 emissionPerSecond_ = allocationPerNft_ / period; 
         if(emissionPerSecond_ == 0) revert InvalidEmission();
+
+        /**
+            Note:
+                Solidity rounds down on division, 
+                so there could be disregarded remainder on calc. emissionPerSecond
+
+                Therefore, the remainder is distributed on the last tick,
+                as seen in the if statement in _calculateClaimable()
+         */
 
         // update storage
         NFT = IERC721(nft);
@@ -214,12 +220,15 @@ contract NftStreaming is Pausable, Ownable2Step {
             bool isDelegated = abi.decode(results[i], (bool));
             if(!isDelegated) revert InvalidDelegate();
 
-            // update tokenId
+            // update tokenId: storage is updated
             uint256 tokenId = tokenIds[i];
             uint256 claimable = _updateLastClaimed(tokenId);
             
             totalAmount += claimable;
             amounts[i] = claimable;
+
+            // transfer
+            TOKEN.safeTransfer(owners[i], claimable);      
         }
        
         // update totalClaimed
@@ -228,15 +237,6 @@ contract NftStreaming is Pausable, Ownable2Step {
         // claimed per tokenId
         emit ClaimedByDelegate(msg.sender, owners, tokenIds, amounts);
  
-        // transfer 
-        for (uint256 i = 0; i < tokenIdsLength; ++i) {
-            
-            address owner = owners[i];    
-            uint256 amount = amounts[i];
-
-            TOKEN.safeTransfer(owner, amount);      
-        }
-
     }
 
     /**
@@ -301,15 +301,15 @@ contract NftStreaming is Pausable, Ownable2Step {
         // stream paused: revert
         if(stream.isPaused) revert StreamPaused();
 
-        //calc claimable
-        (uint256 claimable, uint256 currentTimestamp) = _calculateClaimable(stream.lastClaimedTimestamp);
+        // calc claimable
+        (uint256 claimable, uint256 currentTimestamp) = _calculateClaimable(stream.lastClaimedTimestamp, stream.claimed);
 
-        // update timestamp + claimed
-        
         /** Note: 
             uint128 max value: 340,282,366,920,938,463,463,374,607,431,768,211,455 [340 undecillion]
             If token supply is >= 340 undecillion, SafeCast should be used
          */
+
+        // update timestamp + claimed        
         stream.lastClaimedTimestamp = uint128(currentTimestamp);
         stream.claimed += uint128(claimable);
 
@@ -322,17 +322,26 @@ contract NftStreaming is Pausable, Ownable2Step {
         return claimable;
     }
 
-    function _calculateClaimable(uint128 lastClaimedTimestamp) internal view returns(uint256, uint256) {
+    function _calculateClaimable(uint128 lastClaimedTimestamp, uint128 claimed) internal view returns(uint256, uint256) {
         
         // currentTimestamp <= endTime
         uint256 currentTimestamp = block.timestamp > endTime ? endTime : block.timestamp;
-        // lastClaimedTimestamp >= startTime
-        uint256 lastClaimedTimestamp = lastClaimedTimestamp < startTime ? startTime : lastClaimedTimestamp;
 
-        uint256 timeDelta = currentTimestamp - lastClaimedTimestamp;
-        uint256 claimable = emissionPerSecond * timeDelta;
+        // last tick distributes any remainder, above the usual emissionPerSecond
+        if (currentTimestamp == endTime) {
 
-        return (claimable, currentTimestamp);
+            return (allocationPerNft - claimed, currentTimestamp);
+
+        } else {
+
+            // lastClaimedTimestamp >= startTime
+            uint256 lastClaimedTimestamp = lastClaimedTimestamp < startTime ? startTime : lastClaimedTimestamp;
+
+            uint256 timeDelta = currentTimestamp - lastClaimedTimestamp;
+            uint256 claimable = emissionPerSecond * timeDelta;
+
+            return (claimable, currentTimestamp);
+        }
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -591,7 +600,7 @@ contract NftStreaming is Pausable, Ownable2Step {
         if(stream.lastClaimedTimestamp == block.timestamp) return(0);
 
         // calc. claimable
-        (uint256 claimable, /*uint256 currentTimestamp*/) = _calculateClaimable(stream.lastClaimedTimestamp);
+        (uint256 claimable, /*uint256 currentTimestamp*/) = _calculateClaimable(stream.lastClaimedTimestamp, stream.claimed);
 
         return claimable;
     }

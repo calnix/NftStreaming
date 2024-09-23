@@ -1,0 +1,17 @@
+# Python program to decrement 47554 by 1, check if division has a remainder,
+# and continue until the remainder is 0
+
+def find_reduced_value():
+    value = 47554
+    divisor = 31536000
+
+    while value > 0:
+        if (value * 1e18) % divisor == 0:
+            return value
+        value -= 1
+
+    return None  # Return None if no value found (shouldn't happen in practice)
+
+# Run the function
+reduced_value = find_reduced_value()
+print(reduced_value)
