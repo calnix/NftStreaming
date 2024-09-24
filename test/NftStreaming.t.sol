@@ -88,12 +88,40 @@ abstract contract StateDeploy is Test {
 //Note: t = 0
 contract StateDeployTest is StateDeploy {
 
-    function testEmissionPerSecond() public {
+    function testConstructorParameters() public {
+        // Check NFT address
+        assertEq(address(streaming.NFT()), address(nft));
         
-        uint256 period = endTime - startTime; 
-        uint256 calculatedEPS = (allocationPerNft / period);
-
-        assertEq(calculatedEPS, streaming.emissionPerSecond());
+        // Check TOKEN address
+        assertEq(address(streaming.TOKEN()), address(token));
+        
+        // Check owner
+        assertEq(streaming.owner(), owner);
+        
+        // Check depositor
+        assertEq(streaming.depositor(), depositor);
+        
+        // Check operator
+        assertEq(streaming.operator(), operator);
+        
+        // Check DELEGATE_REGISTRY
+        assertEq(address(streaming.DELEGATE_REGISTRY()), address(0));
+        
+        // Check allocationPerNft
+        assertEq(streaming.allocationPerNft(), allocationPerNft);
+        
+        // Check startTime
+        assertEq(streaming.startTime(), startTime);
+        
+        // Check endTime
+        assertEq(streaming.endTime(), endTime);
+        
+        // Check totalAllocation
+        assertEq(streaming.totalAllocation(), allocationPerNft * streaming.totalSupply());
+        
+        // Check emissionPerSecond
+        uint256 expectedEmissionPerSecond = allocationPerNft / (endTime - startTime);
+        assertEq(streaming.emissionPerSecond(), expectedEmissionPerSecond);
     }
 
     function testUsersCannotDeposit() public {
@@ -128,7 +156,7 @@ contract StateDeployTest is StateDeploy {
         assertEq(streaming.totalDeposited(), 0);
 
         uint256 totalAllocation = streaming.totalAllocation();
-        
+
         vm.expectRevert(abi.encodeWithSelector(ExcessDeposit.selector));
 
         vm.prank(depositor);

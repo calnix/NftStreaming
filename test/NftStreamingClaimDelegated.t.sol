@@ -254,15 +254,33 @@ abstract contract StateDeploy is SimulateUsersAndDelegations {
 
 //Note: t = 0
 contract StateDeployTest is StateDeploy {
-
-    function testEmissionPerSecond() public {
-        
-        uint256 period = endTime - startTime; 
-        uint256 calculatedEPS = (allocationPerNft / period);
-
-        assertEq(calculatedEPS, streaming.emissionPerSecond());
-    }
     
+    function testConstructor() public {
+        // Test immutable variables
+        assertEq(address(streaming.NFT()), address(mocaNft));
+        assertEq(address(streaming.TOKEN()), address(token));
+        assertEq(address(streaming.DELEGATE_REGISTRY()), address(delegateV2));
+        assertEq(streaming.startTime(), startTime);
+        assertEq(streaming.endTime(), endTime);
+        assertEq(streaming.allocationPerNft(), allocationPerNft);
+        assertEq(streaming.totalAllocation(), allocationPerNft * streaming.totalSupply());
+
+        // Test initial state variables
+        assertEq(streaming.depositor(), depositor);
+        assertEq(streaming.operator(), operator);
+        assertEq(streaming.totalClaimed(), 0);
+        assertEq(streaming.totalDeposited(), 0);
+        assertEq(streaming.deadline(), 0);
+        assertEq(streaming.isFrozen(), 0);
+
+        // Test owner
+        assertEq(streaming.owner(), owner);
+
+        // Test emissionPerSecond calculation
+        uint256 expectedEmissionPerSecond = allocationPerNft / (endTime - startTime);
+        assertEq(streaming.emissionPerSecond(), expectedEmissionPerSecond);
+    }
+
     function testUsersCannotDeposit() public {
         
         vm.expectRevert(abi.encodeWithSelector(OnlyDepositor.selector));
