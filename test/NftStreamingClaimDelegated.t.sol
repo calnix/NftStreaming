@@ -375,6 +375,16 @@ contract StateT03Test is StateT03 {
 
     }
 
+
+    function testEmptyArrayCannotClaimDelegated() public {
+        uint256[] memory emptyTokenIds = new uint256[](0);
+
+        vm.expectRevert(abi.encodeWithSelector(EmptyArray.selector));
+
+        vm.prank(userA);
+        streaming.claimDelegated(emptyTokenIds);
+    }
+
     //can call claim; 1 second of emissions claimable
     function testUserACanClaim_T03() public {
         //claimable

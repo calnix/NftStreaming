@@ -104,6 +104,37 @@ contract StateDeployTest is StateDeploy {
         streaming.deposit(totalAllocation);
     }
 
+    function testUserCannotUpdateDepositor() public {
+
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, userA));
+
+        vm.prank(userA);
+        streaming.updateDepositor(userA);
+    }
+
+    function testOwnerCanUpdateDepositor() public {
+
+        vm.expectEmit(true, true, true, true);
+        emit DepositorUpdated(depositor, userA);
+
+        vm.prank(owner);
+        streaming.updateDepositor(userA);   
+
+        assertEq(streaming.depositor(), userA);
+    }
+
+    function testDepositorCannotDepositExcessAllocation() public {
+        
+        assertEq(streaming.totalDeposited(), 0);
+
+        uint256 totalAllocation = streaming.totalAllocation();
+        
+        vm.expectRevert(abi.encodeWithSelector(ExcessDeposit.selector));
+
+        vm.prank(depositor);
+        streaming.deposit(totalAllocation + 1);
+    }
+
     function testDepositorCanDeposit() public {
 
         assertEq(streaming.totalDeposited(), 0);
@@ -140,6 +171,25 @@ contract StateDepositedTest is StateDeposited {
 
         vm.prank(userA);
         streaming.claimSingle(0);     
+    }
+
+    function testUserCannotUpdateOperator() public {
+
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, userA));
+
+        vm.prank(userA);
+        streaming.updateOperator(userA);
+    }
+
+    function testOwnerCanUpdateOperator() public {
+
+        vm.expectEmit(true, true, true, true);
+        emit OperatorUpdated(operator, userA);
+
+        vm.prank(owner);
+        streaming.updateOperator(userA);
+        
+        assertEq(streaming.operator(), userA);
     }
 }
 
@@ -646,6 +696,18 @@ contract StateStreamEndedPlusTwoDaysTest is StateStreamEndedPlusTwoDays {
         streaming.withdraw();   
     }
 
+    function testUserCannotUpdateDeadline() public {
+        uint256 newDeadline = endTime + 20 days;
+
+        vm.expectRevert(abi.encodeWithSelector((Ownable.OwnableUnauthorizedAccount.selector), userA));
+
+        vm.prank(userA);
+        streaming.updateDeadline(newDeadline);
+
+        // Verify deadline hasn't changed
+        assertEq(streaming.deadline(), 0);
+    }
+
     function testCannotUpdateDeadlineUnderEndTimeBuffer() public {
         
         uint256 newDeadline = (endTime + 13 days);
@@ -664,7 +726,7 @@ contract StateStreamEndedPlusTwoDaysTest is StateStreamEndedPlusTwoDays {
         streaming.updateDeadline(block.timestamp + 13 days);
     }
 
-    function testOwnerCanSetDeadline() public {
+    function testOwnerCanUpdateDeadline() public {
 
         // verify before
         assertEq(streaming.endTime(), endTime);

@@ -155,6 +155,14 @@ contract StateDepositedTest is StateDeposited {
         streaming.claimViaModule(address(mockModule), tokenIds);
     }
 
+    function testUserCannotSetModule() public {
+
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, userA));
+
+        vm.prank(userA);
+        streaming.updateModule(address(mockModule), true);
+    }
+
     function testOwnerCanSetModule() public {
 
         assertEq(streaming.modules(address(mockModule)), false);
@@ -230,6 +238,15 @@ contract StateT03Test is StateT03 {
 
         vm.prank(userC);
         streaming.claimViaModule(address(0), tokenIds);
+    }
+
+    function testEmptyArrayCannotClaimViaModule() public {
+        uint256[] memory tokenIds = new uint256[](0);
+
+        vm.expectRevert(abi.encodeWithSelector(EmptyArray.selector));
+
+        vm.prank(userC);
+        streaming.claimViaModule(address(mockModule), tokenIds);
     }
 
     function testWrongUserCannotClaimViaModule() public {

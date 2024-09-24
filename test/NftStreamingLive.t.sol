@@ -53,10 +53,10 @@ abstract contract StateDeploy is Test {
         depositor = makeAddr("depositor");
 
         // stream params
-        // start: Oct 11 2024 17:00:00 HKT -> 1728640800
-        startTime = 1728640800;
-        // end: Oct 11 2025, 17:00:00 HKT -> 1760176800
-        endTime = 1760176800;
+        // start: Oct 11 2024 17:00:00 HKT -> 1728637200
+        startTime = 1728637200;
+        // end: Oct 11 2025, 17:00:00 HKT -> 1760173200 
+        endTime = 1760173200;
         allocationPerNft = 47_554.52 ether;
         totalAllocation = allocationPerNft * 4;
 
