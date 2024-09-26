@@ -298,7 +298,7 @@ contract StateT03Test is StateT03 {
 
         // check events
         vm.expectEmit(true, true, true, true);
-        emit Claimed(userA, 1 ether);
+        emit ClaimedSingle(userA, 0, 1 ether);
 
         vm.prank(userA);
         streaming.claimSingle(0);     

@@ -20,9 +20,9 @@ contract DeployMainnet is Script {
         address token = 0xF944e35f95E819E752f3cCB5Faf40957d311e8c5;             // https://etherscan.io/address/0xf944e35f95e819e752f3ccb5faf40957d311e8c5
         address delegateRegistry = 0x00000000000000447e69651d841bD8D104Bed493;  // https://docs.delegate.xyz/technical-documentation/delegate-registry/contract-addresses
         
-        address owner = 0xABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCD; // Replace with actual owner address
-        address depositor = 0xDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF; // Replace with actual depositor address
-        address operator = 0xBEEFBEEFBEEFBEEFBEEFBEEFBEEFBEEFBEEFBEEF; // Replace with actual operator address
+        address owner = 0xDeaDbeefdEAdbeefdEadbEEFdeadbeEFdEaDbeeF; // Replace with actual owner address
+        address depositor = 0xDeaDbeefdEAdbeefdEadbEEFdeadbeEFdEaDbeeF; // Replace with actual depositor address
+        address operator = 0xDeaDbeefdEAdbeefdEadbEEFdeadbeEFdEaDbeeF; // Replace with actual operator address
         
         uint256 allocationPerNft = 47_554.52 ether;
         

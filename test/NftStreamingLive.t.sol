@@ -193,7 +193,7 @@ contract StateStartTimePlusOneTest is StateStartTimePlusOne {
 
         // check events
         vm.expectEmit(true, true, true, true);
-        emit Claimed(userA, streaming.emissionPerSecond());
+        emit ClaimedSingle(userA, 0, streaming.emissionPerSecond());
 
         vm.prank(userA);
         streaming.claimSingle(0);     

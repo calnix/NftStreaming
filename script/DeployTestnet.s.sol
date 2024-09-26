@@ -18,7 +18,7 @@ contract DeployTestnet is Script {
     function run() public {
         
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY_TEST");
-        uint256 deployerAddress = vm.envUint("PUBLIC_KEY_TEST");
+        address deployerAddress = vm.envAddress("PUBLIC_KEY_TEST");
 
         vm.startBroadcast(deployerPrivateKey);    
 
