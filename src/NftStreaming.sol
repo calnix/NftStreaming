@@ -77,9 +77,10 @@ contract NftStreaming is Pausable, Ownable2Step {
     // Trusted contracts to call
     mapping(address module => bool isRegistered) public modules;    
 
+    // note: uint128(allocationPerNft) is used to ensure downstream calculations involving claimable do not overflow
     constructor(
         address nft, address token, address owner, address depositor_, address operator_, address delegateRegistry,
-        uint256 allocationPerNft_, uint256 startTime_, uint256 endTime_) Ownable(owner) {
+        uint128 allocationPerNft_, uint256 startTime_, uint256 endTime_) Ownable(owner) {
              
         // check inputs 
         if(startTime_ <= block.timestamp) revert InvalidStartime();
@@ -112,7 +113,7 @@ contract NftStreaming is Pausable, Ownable2Step {
         endTime = endTime_;
         emissionPerSecond = emissionPerSecond_;
 
-        allocationPerNft = allocationPerNft_;        
+        allocationPerNft = uint256(allocationPerNft_);        
         totalAllocation = allocationPerNft_ * totalSupply;
     }
 

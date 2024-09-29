@@ -238,7 +238,7 @@ abstract contract StateDeploy is SimulateUsersAndDelegations {
         token = new ERC20Mock();       
 
         streaming = new NftStreaming(address(mocaNft), address(token), owner, depositor, operator, address(delegateV2), 
-                                    allocationPerNft, startTime, endTime);
+                                    uint128(allocationPerNft), startTime, endTime);
 
         vm.stopPrank();
     

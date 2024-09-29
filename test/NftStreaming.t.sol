@@ -65,7 +65,7 @@ abstract contract StateDeploy is Test {
         nft = new MockNFT();
 
         streaming = new NftStreaming(address(nft), address(token), owner, depositor, operator, address(0), 
-                                    allocationPerNft, startTime, endTime);
+                                    uint128(allocationPerNft), startTime, endTime);
 
         vm.stopPrank();
 

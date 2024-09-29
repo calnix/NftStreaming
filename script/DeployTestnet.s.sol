@@ -39,7 +39,7 @@ contract DeployTestnet is Script {
         uint256 endTime = 1760173200; 
 
         streaming = new NftStreaming(address(mockNft), address(mockToken), owner, depositor, operator, delegateRegistry,
-                    allocationPerNft, startTime, endTime);
+                    uint128(allocationPerNft), startTime, endTime);
 
         vm.stopBroadcast();
     }

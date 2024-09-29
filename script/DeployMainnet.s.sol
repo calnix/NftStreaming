@@ -33,7 +33,7 @@ contract DeployMainnet is Script {
 
         
         streaming = new NftStreaming(nft, token, owner, depositor, operator, delegateRegistry,
-                        allocationPerNft, startTime, endTime);
+                        uint128(allocationPerNft), startTime, endTime);
 
         
         vm.stopBroadcast();
