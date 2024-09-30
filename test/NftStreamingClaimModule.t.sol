@@ -448,7 +448,7 @@ contract StateT05Test is StateT05 {
 
         // check events
         vm.expectEmit(true, true, true, true);
-        emit ClaimedByModule(address(mockModule), tokenIds, amounts);
+        emit ClaimedByModule(address(mockModule), userC, tokenIds, amounts);
 
         vm.prank(userC);
         streaming.claimViaModule(address(mockModule), tokenIds);
@@ -493,7 +493,7 @@ contract StateT05Test is StateT05 {
 
         // check events
         vm.expectEmit(true, true, true, true);
-        emit ClaimedByModule(address(mockModule), tokenIds, amounts);
+        emit ClaimedByModule(address(mockModule), userC, tokenIds, amounts);
 
         vm.prank(userC);
         streaming.claimViaModule(address(mockModule), tokenIds);

@@ -22,6 +22,7 @@ error PrematureWithdrawal();
 error InvalidNewDeadline();
 
 error ZeroAddress();
+error StaticCallFailed();
 error UnregisteredModule();
 error ModuleCheckFailed();
 

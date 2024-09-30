@@ -28,7 +28,7 @@ contract NftStreaming is Pausable, Ownable2Step {
     IERC20 public immutable TOKEN;
 
     // external 
-    IDelegateRegistry public immutable DELEGATE_REGISTRY;  // https://docs.delegate.xyz/technical-documentation/delegate-registry/contract-addresses
+    address public immutable DELEGATE_REGISTRY;  // https://docs.delegate.xyz/technical-documentation/delegate-registry/contract-addresses
 
     // total supply of NFTs
     uint256 public constant totalSupply = 8_888;
@@ -104,7 +104,7 @@ contract NftStreaming is Pausable, Ownable2Step {
         // update storage
         NFT = IERC721(nft);
         TOKEN = IERC20(token);
-        DELEGATE_REGISTRY = IDelegateRegistry(delegateRegistry);
+        DELEGATE_REGISTRY = delegateRegistry;
 
         depositor = depositor_;
         operator = operator_;
@@ -205,12 +205,19 @@ contract NftStreaming is Pausable, Ownable2Step {
             owners[i] = nftOwner;
 
             // data for multicall
-            data[i] = abi.encodeCall(DELEGATE_REGISTRY.checkDelegateForERC721, 
+            data[i] = abi.encodeCall(IDelegateRegistry(DELEGATE_REGISTRY).checkDelegateForERC721, 
                         (msg.sender, nftOwner, address(NFT), tokenId, ""));
         }
         
+        // data for staticCall
+        bytes memory staticData = abi.encodeCall(IDelegateRegistry(DELEGATE_REGISTRY).multicall, data); 
+        
+        // staticCall
+        (bool success, bytes memory result) = DELEGATE_REGISTRY.staticcall(staticData); 
+        if (!success) revert StaticCallFailed();
+
         // if a tokenId is not delegated will return false; as a bool
-        bytes[] memory results = DELEGATE_REGISTRY.multicall(data);
+        bytes[] memory results = abi.decode(result, (bytes[]));
 
         uint256 totalAmount;
         uint256[] memory amounts = new uint256[](tokenIdsLength);
