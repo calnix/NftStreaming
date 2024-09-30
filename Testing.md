@@ -94,7 +94,7 @@ UserC lock 1 of 2 nfts at t3, claiming of the locked nft at t5, and then subsequ
 
 ## NftStreamingClaimDelegated.t.sol
 
-Builds on NftStreaming.t.sol to test core functionality through `claimViaModule`.
+Builds on NftStreaming.t.sol to test core functionality through `claimDelegated`.
 Forks mainnet for delegationV2 and mocaNft. Tokens are mocked.
 
 ## NftStreamingPausingStreams.t.sol
