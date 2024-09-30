@@ -38,7 +38,7 @@ Claim functions will be segregated as per NFT location. E.g.:
 - `claimDelegated`: if NFTs are delegated
 - `claimViaModule`: if NFTs are on some other contract like staking pro
 
-User will call a different fn based on where his NFTs are located. All functions will allow for claiming on multiple NFTs at once. However, a user cannot claim across multiple venues at once.
+User will call a different fn based on where his NFTs are located. However, a user cannot claim across multiple venues at once.
 
 All the claims are multiple claims except for the `claimSingle`; which is offered as ~50% of user base have 1 NFT.
 
@@ -60,20 +60,8 @@ By adding either that contract or a intermediate helper contract, users can clai
 - Users will claim via `claimViaModule`
 - Owner can allow/block modules via `updateModule`
 
-Module contracts are expected to implement the function `streamingOwnerCheck(address user, uint256[] tokenIds)`, which will be called via staticCall.
-
-The data passed via staticcall will be:
-
-```solidity
-        bytes memory data = abi.encodeWithSignature("streamingOwnerCheck(address,uint256[])", msg.sender, tokenIds);
-        
-        (bool success, /*bytes memory result*/) = module.staticcall(data);
-        if(!success) revert ModuleCheckFailed();       
-```
-
-`streamingOwnerCheck` in a module is expected to revert if the msg.sender address that was passed does not match any of the tokenIds registered owner addresses.
-
-Since low-level calls fail silently, we have to check that `success` is not false.
+Module contracts are expected to implement the view function `streamingOwnerCheck(address user, uint256[] tokenIds)`.
+The IModule interface enforces it to be a view function.
 
 ## Financing
 
@@ -84,7 +72,7 @@ Since low-level calls fail silently, we have to check that `success` is not fals
 - Depositor can deposit tokens incrementally over some period (i.e. monthly), to ensure contract is well supplied with needed tokens for stream claims.
 -- Not required to deposit in full for the entire period upfront.
 
-Only the contract can change this depositor address; if needed.
+Only the contract owner can change this depositor address; if needed.
 
 ### Withdraw
 
