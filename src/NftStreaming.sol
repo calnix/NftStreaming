@@ -276,7 +276,7 @@ contract NftStreaming is Pausable, Ownable2Step {
         totalClaimed += totalAmount;
 
         // claimed per tokenId
-        emit ClaimedByModule(module, tokenIds, amounts);
+        emit ClaimedByModule(module, msg.sender, tokenIds, amounts);
 
         // transfer 
         TOKEN.safeTransfer(msg.sender, totalAmount);    

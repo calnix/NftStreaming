@@ -33,14 +33,90 @@ contract DeployTestnet is Script {
         
         uint256 allocationPerNft = 47_554.52 ether;
         
-        // Oct 11 2024 17:00:00 HKT
-        uint256 startTime = 1728637200; 
-        // Oct 11 2025, 17:00:00 HKT
-        uint256 endTime = 1760173200; 
+        // now + 1 hour
+        uint256 startTime = block.timestamp + 3600; 
+        // now + 10 days
+        uint256 endTime = startTime + 864000; 
 
+        // calculate total allocation
+        uint256 totalAllocation = allocationPerNft * 8_888;
+
+
+        // deploy streaming
         streaming = new NftStreaming(address(mockNft), address(mockToken), owner, depositor, operator, delegateRegistry,
                     uint128(allocationPerNft), startTime, endTime);
+
+        // mint + deposit all tokens
+        mockToken.mint(depositor, totalAllocation);
+        mockToken.approve(address(streaming), totalAllocation);
+        streaming.deposit(totalAllocation);
 
         vm.stopBroadcast();
     }
 }
+
+// forge script script/DeployTestnet.s.sol:DeployTestnet --rpc-url arbitrum_sepolia --broadcast --verify -vvvvv --etherscan-api-key arbitrum_sepolia
+
+contract PoorMansBundle {
+    
+    NftStreaming public streaming;
+    MockNFT public mockNft;
+    ERC20Mock public mockToken;
+    
+    address public constant deployerAddress = 0x8C9C001F821c04513616fd7962B2D8c62f925fD2;
+
+        address owner = deployerAddress;
+        address depositor = deployerAddress;
+        address operator = deployerAddress;
+
+    // deploy params    
+    address public constant delegateRegistry = address(0);
+    uint256 public constant allocationPerNft = 47_554.52 ether;
+
+    // now + 1 hour
+    uint256 public startTime = block.timestamp + 3600; 
+    // now + 10 days
+    uint256 public endTime = startTime + 864000; 
+
+    // calculate total allocation
+    uint256 public constant totalAllocation = allocationPerNft * 8_888;
+
+    constructor() {
+        
+        // deploy mock contracts
+        mockNft = new MockNFT();
+        mockToken = new ERC20Mock();
+
+        streaming = new NftStreaming(address(mockNft), address(mockToken), owner, depositor, operator, delegateRegistry,
+                    uint128(allocationPerNft), startTime, endTime);
+
+        // mint tokens
+        mockToken.mint(depositor, totalAllocation);
+
+    }
+}
+
+contract BatchDeploy is Script {
+
+    function setUp() public {}
+
+
+    function run() public {
+
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY_TEST");
+        address deployerAddress = vm.envAddress("PUBLIC_KEY_TEST");
+
+        vm.startBroadcast(deployerPrivateKey);    
+
+        // batch deploy
+        new PoorMansBundle();
+
+        // deposit all tokens
+        //mockToken.approve(address(streaming), PoorMansBundle.totalAllocation());
+        //streaming.deposit(PoorMansBundle.totalAllocation());
+
+        vm.stopBroadcast();
+    }
+}
+
+// forge script script/DeployTestnet.s.sol:BatchDeploy --rpc-url arbitrum_sepolia --broadcast --verify -vvvvv --etherscan-api-key arbitrum_sepolia --legacy

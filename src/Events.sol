@@ -5,7 +5,7 @@ pragma solidity 0.8.24;
 event ClaimedSingle(address indexed user, uint256 tokenId, uint256 amount);
 event Claimed(address indexed user, uint256[] tokenIds, uint256[] amounts);
 event ClaimedByDelegate(address indexed delegate, address[] owners, uint256[] tokenIds, uint256[] amounts);
-event ClaimedByModule(address indexed module, uint256[] tokenIds, uint256[] amounts);
+event ClaimedByModule(address indexed module, address indexed msgSender, uint256[] tokenIds, uint256[] amounts);
 
 event Deposited(address indexed operator, uint256 amount);
 event Withdrawn(address indexed operator, uint256 amount);
