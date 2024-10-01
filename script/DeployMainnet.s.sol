@@ -12,7 +12,7 @@ contract DeployMainnet is Script {
 
     function run() public {
         
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY_TEST");
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY_ACTUAL");
         vm.startBroadcast(deployerPrivateKey);    
 
         
