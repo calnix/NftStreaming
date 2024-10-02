@@ -184,7 +184,7 @@ contract NftStreaming is Pausable, Ownable2Step {
 
     /**
      * @notice Users to claim via delegated hot wallets
-     * @dev msg.sender is designated delegate of nfts
+     * @dev Expects tokenIds to be ordered based on common ownership: [ownerA, ownerA, ownerB]
      * @param tokenIds Nfts' tokenId
      */  
     function claimDelegated(uint256[] calldata tokenIds) external whenStartedAndBeforeDeadline whenNotPaused {
@@ -222,6 +222,9 @@ contract NftStreaming is Pausable, Ownable2Step {
         uint256 totalAmount;
         uint256[] memory amounts = new uint256[](tokenIdsLength);
 
+        address addressCache; 
+        uint256 amountCache;
+
         for (uint256 i = 0; i < tokenIdsLength; ++i) {
             
             // multiCall uses delegateCall: decode return data
@@ -235,17 +238,43 @@ contract NftStreaming is Pausable, Ownable2Step {
             totalAmount += claimable;
             amounts[i] = claimable;
 
-            // transfer
-            TOKEN.safeTransfer(owners[i], claimable);      
+            // initial reference
+            if (i == 0) {
+
+                addressCache = owners[i];
+                amountCache = claimable;
+
+            } else { 
+
+                // check owner matches previous tokenid's owner
+                if (addressCache == owners[i]) {
+                    // increment amountCache
+                    amountCache += claimable; 
+
+                } else {  // if different owner from previous token id
+
+                    // transfer current amountCache
+                    TOKEN.safeTransfer(addressCache, amountCache); 
+
+                    // update cache to current token id info
+                    addressCache = owners[i];
+                    amountCache = claimable;
+                } 
+            }
         }
        
+
+        if (amountCache != 0) {
+            TOKEN.safeTransfer(addressCache, amountCache); 
+        }
+
         // update totalClaimed
         totalClaimed += totalAmount;
 
         // claimed per tokenId
         emit ClaimedByDelegate(msg.sender, owners, tokenIds, amounts);
- 
     }
+    
 
     /**
      * @notice Users to claim, if nft is locked on some contract (e.g. staking pro)

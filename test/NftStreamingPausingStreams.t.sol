@@ -193,9 +193,9 @@ contract StateT03Test is StateT03 {
         assertEq(userCTokenBalance_before + epsClaimable, userCTokenBalance_after);
 
         // check streaming contract: tokenIds
-        for (uint256 i = tokenIds[0]; i < tokenIds.length; ++i) {
+        for (uint256 i = 0; i < tokenIds.length; ++i) {
 
-            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
+            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(tokenIds[i]);
 
             assertEq(claimed, epsClaimable/tokenIds.length);
             assertEq(lastClaimedTimestamp, block.timestamp);
@@ -229,8 +229,9 @@ contract StateT03Test is StateT03 {
         streaming.pauseStreams(tokenIds);
 
         // check streaming contract: tokenIds
-        for (uint256 i = tokenIds[0]; i < tokenIds.length; ++i) {
-            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
+        for (uint256 i = 0; i < tokenIds.length; ++i) {
+
+            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(tokenIds[i]);
 
             assertEq(isPaused, true);
         }
@@ -250,8 +251,9 @@ contract StateT03Test is StateT03 {
         streaming.pauseStreams(tokenIds);
 
         // check streaming contract: tokenIds
-        for (uint256 i = tokenIds[0]; i < tokenIds.length; ++i) {
-            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
+        for (uint256 i = 0; i < tokenIds.length; ++i) {
+
+            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(tokenIds[i]);
 
             assertEq(isPaused, true);
         }
@@ -372,9 +374,9 @@ contract StateT05Test is StateT05 {
         streaming.unpauseStreams(tokenIds);
 
         // check streaming contract: tokenIds
-        for (uint256 i = tokenIds[0]; i < tokenIds.length; ++i) {
+        for (uint256 i = 0; i < tokenIds.length; ++i) {
 
-            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
+            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(tokenIds[i]);
             assertEq(isPaused, false);
         }
     }
@@ -508,11 +510,11 @@ contract StateStreamEndedTest is StateStreamEnded {
         assertEq(userCTokenBalance_before + epsClaimable, userCTokenBalance_after);
 
         // check streaming contract: tokenIds
-        for (uint256 i = tokenIds[0]; i < tokenIds.length; ++i) {
+        for (uint256 i = 0; i < tokenIds.length; ++i) {
 
-            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
+            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(tokenIds[i]);
 
-            assertEq(claimed, epsClaimable/tokenIds.length);
+            assertEq(claimed, allocationPerNft);
             assertEq(lastClaimedTimestamp, block.timestamp);
             assertEq(isPaused, false);
 

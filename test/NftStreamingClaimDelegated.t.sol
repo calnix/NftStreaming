@@ -140,17 +140,16 @@ abstract contract SimulateUsersAndDelegations is ForkMainnet {
         mocaNft.transferFrom(mocaNft.ownerOf(3), userC_cw, 3);
         vm.stopPrank();
 
+
         // delegate cold wallet to hot wallet
         vm.prank(userA_cw);    
-        //delegateV2.delegateAll(userA, bytes32(0), true);
         delegateV2.delegateERC721(userA, address(mocaNft), 0, bytes32(0), true);
         
+        // userB_cw delegates to userC
         vm.prank(userB_cw);    
-        //delegateV2.delegateAll(userB, bytes32(0), true);
-        delegateV2.delegateERC721(userB, address(mocaNft), 1, bytes32(0), true);
+        delegateV2.delegateERC721(userC, address(mocaNft), 1, bytes32(0), true);
 
         vm.startPrank(userC_cw);    
-        //delegateV2.delegateAll(userC, bytes32(0), true);
         delegateV2.delegateERC721(userC, address(mocaNft), 2, bytes32(0), true);
         delegateV2.delegateERC721(userC, address(mocaNft), 3, bytes32(0), true);
         vm.stopPrank();
@@ -183,7 +182,8 @@ contract SimulateUsersAndDelegationsTest is SimulateUsersAndDelegations {
         isDelegated = delegateV2.checkDelegateForERC721(userA, userA_cw, address(mocaNft), 0, bytes32(0));
         assertTrue(isDelegated);
 
-        isDelegated = delegateV2.checkDelegateForERC721(userB, userB_cw, address(mocaNft), 1, bytes32(0));
+        // userB's coldwallet delegates to userC
+        isDelegated = delegateV2.checkDelegateForERC721(userC, userB_cw, address(mocaNft), 1, bytes32(0));
         assertTrue(isDelegated);
 
         isDelegated = delegateV2.checkDelegateForERC721(userC, userC_cw, address(mocaNft), 2, bytes32(0));
@@ -214,6 +214,17 @@ abstract contract StateDeploy is SimulateUsersAndDelegations {
 
     // record-keeping
     uint256 public totalClaimed;
+
+    struct UserBalances {
+        uint256 userA;
+        uint256 userA_cw;
+
+        uint256 userB;
+        uint256 userB_cw;
+
+        uint256 userC;
+        uint256 userC_cw;
+    }    
 
     function setUp() public virtual override {
         super.setUp();
@@ -489,9 +500,9 @@ contract StateT03Test is StateT03 {
         assertEq(userCCwTokenBalance_before + epsClaimable, userCCwTokenBalance_after);
 
         // check streaming contract: tokenIds
-        for (uint256 i = tokenIds[0]; i < tokenIds.length; ++i) {
+        for (uint256 i = 0; i < tokenIds.length; ++i) {
 
-            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
+            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(tokenIds[i]);
 
             assertEq(claimed, epsClaimable/tokenIds.length);
             assertEq(lastClaimedTimestamp, block.timestamp);
@@ -544,9 +555,9 @@ contract StateT03Test is StateT03 {
         assertEq(userCCwTokenBalance_before + epsClaimable, userCCwTokenBalance_after);
 
         // check streaming contract: tokenIds
-        for (uint256 i = tokenIds[0]; i < tokenIds.length; ++i) {
+        for (uint256 i = 0; i < tokenIds.length; ++i) {
 
-            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
+            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(tokenIds[i]);
 
             assertEq(claimed, streaming.emissionPerSecond());
             assertEq(lastClaimedTimestamp, block.timestamp);
@@ -555,6 +566,144 @@ contract StateT03Test is StateT03 {
         // check streaming contract: storage variables
         assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
     }
+    
+    // tokenIds: [userC_cw, userC_cw, userB_cw]
+    // different cold wallets delegating to the same hot wallet
+    function testUserCHotWalletCanClaimForDifferentColdWallets_OrderedArray_T03() public {
+
+        //------------ arrays        
+        uint256[] memory tokenIds = new uint256[](3);
+            tokenIds[0] = 2;
+            tokenIds[1] = 3;
+            tokenIds[2] = 1;
+
+        address[] memory owners = new address[](3);
+            owners[0] = userC_cw;
+            owners[1] = userC_cw;
+            owners[2] = userB_cw;
+
+        uint256[] memory amounts = new uint256[](3);
+            amounts[0] = streaming.emissionPerSecond();
+            amounts[1] = streaming.emissionPerSecond();
+            amounts[2] = streaming.emissionPerSecond();
+
+        // ---------------------------------------------------
+
+        // claimable: 1 eps per NFT; 3 NFTs
+        uint256 epsClaimable = 3 * streaming.emissionPerSecond();  
+
+        //before balances
+        UserBalances memory usersBefore;
+            usersBefore.userB = token.balanceOf(userB);    
+            usersBefore.userB_cw = token.balanceOf(userB_cw);
+            usersBefore.userC = token.balanceOf(userC);
+            usersBefore.userC_cw = token.balanceOf(userC_cw);
+
+        // check events
+        vm.expectEmit(true, true, true, true);
+        emit ClaimedByDelegate(userC, owners, tokenIds, amounts);
+
+        vm.prank(userC);
+        streaming.claimDelegated(tokenIds);
+
+        // .... after balances
+        UserBalances memory usersAfter;
+            usersAfter.userB = token.balanceOf(userB);    
+            usersAfter.userB_cw = token.balanceOf(userB_cw);
+            usersAfter.userC = token.balanceOf(userC);
+            usersAfter.userC_cw = token.balanceOf(userC_cw);
+   
+        // check tokens transfers
+        assertEq(token.balanceOf(address(streaming)), totalAllocation - epsClaimable);
+        //userB
+        assertEq(usersBefore.userB, usersAfter.userB);
+        assertEq(usersBefore.userB_cw + streaming.emissionPerSecond(), usersAfter.userB_cw);
+        //userC
+        assertEq(usersBefore.userC, usersAfter.userC);
+        assertEq(usersBefore.userC_cw + (2 * streaming.emissionPerSecond()), usersAfter.userC_cw);
+
+            // check streaming contract: tokenIds
+        for (uint256 i = 0; i < tokenIds.length; ++i) {
+
+            (uint128 claimed, uint128 lastClaimedTimestamp, ) = streaming.streams(tokenIds[i]);
+
+            assertEq(claimed, epsClaimable/3);
+            assertEq(lastClaimedTimestamp, block.timestamp);
+        }
+
+        // check streaming contract: storage variables
+        assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));   
+    }
+
+    // tokenIds: [userC_cw, userB_cw, userC_cw]
+    // different cold wallets delegating to the same hot wallet
+    function testUserCHotWalletCanClaimForDifferentColdWallets_UnorderedArray_T03() public {
+
+        //------------ arrays        
+        uint256[] memory tokenIds = new uint256[](3);
+            tokenIds[0] = 2;
+            tokenIds[1] = 1;
+            tokenIds[2] = 3;
+
+        address[] memory owners = new address[](3);
+            owners[0] = userC_cw;
+            owners[1] = userB_cw;
+            owners[2] = userC_cw;
+
+        uint256[] memory amounts = new uint256[](3);
+            amounts[0] = streaming.emissionPerSecond();
+            amounts[1] = streaming.emissionPerSecond();
+            amounts[2] = streaming.emissionPerSecond();
+
+        // ---------------------------------------------------
+
+        // claimable: 1 eps per NFT; 3 NFTs
+        uint256 epsClaimable = 3 * streaming.emissionPerSecond();  
+
+        //before balances
+        UserBalances memory usersBefore;
+            usersBefore.userB = token.balanceOf(userB);    
+            usersBefore.userB_cw = token.balanceOf(userB_cw);
+            usersBefore.userC = token.balanceOf(userC);
+            usersBefore.userC_cw = token.balanceOf(userC_cw);
+
+        // check events
+        vm.expectEmit(true, true, true, true);
+        emit ClaimedByDelegate(userC, owners, tokenIds, amounts);
+
+        vm.prank(userC);
+        streaming.claimDelegated(tokenIds);
+
+        // .... after balances
+        UserBalances memory usersAfter;
+            usersAfter.userB = token.balanceOf(userB);    
+            usersAfter.userB_cw = token.balanceOf(userB_cw);
+            usersAfter.userC = token.balanceOf(userC);
+            usersAfter.userC_cw = token.balanceOf(userC_cw);
+
+
+        // check tokens transfers
+        assertEq(token.balanceOf(address(streaming)), totalAllocation - epsClaimable);
+        //userB
+        assertEq(usersBefore.userB, usersAfter.userB);
+        assertEq(usersBefore.userB_cw + streaming.emissionPerSecond(), usersAfter.userB_cw);
+        //userC
+        assertEq(usersBefore.userC, usersAfter.userC);
+        assertEq(usersBefore.userC_cw + (2 * streaming.emissionPerSecond()), usersAfter.userC_cw);
+
+        // check streaming contract: tokenIds
+        for (uint256 i = 0; i < tokenIds.length; ++i) {
+
+            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(tokenIds[i]);
+
+            assertEq(claimed, epsClaimable/3);
+            assertEq(lastClaimedTimestamp, block.timestamp);
+        }
+
+        // check streaming contract: storage variables
+        assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));   
+    }
+
 }
 
 
@@ -572,15 +721,16 @@ abstract contract StateT05 is StateT03 {
         streaming.claimDelegated(userATokenIds);
 
         // userC claims @ t3
-        uint256[] memory userCTokenIds = new uint256[](2);
+        uint256[] memory userCTokenIds = new uint256[](3);
             userCTokenIds[0] = 2;
             userCTokenIds[1] = 3;
+            userCTokenIds[2] = 1;   //userB_cw's nft
         
         vm.prank(userC);
         streaming.claimDelegated(userCTokenIds);
         
         // record: 1 unit of eps claimed by each nft
-        totalClaimed += 3 * streaming.emissionPerSecond();
+        totalClaimed += 4 * streaming.emissionPerSecond();
 
         // time
         vm.warp(5);
@@ -677,16 +827,152 @@ contract StateT05Test is StateT05 {
         assertEq(userCCwTokenBalance_before + epsClaimable, userCCwTokenBalance_after);
 
         // check streaming contract: tokenIds
-        for (uint256 i = tokenIds[0]; i < tokenIds.length; ++i) {
+        for (uint256 i = 0; i < tokenIds.length; ++i) {
 
-            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
+            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(tokenIds[i]);
 
-            assertEq(claimed, epsClaimable/tokenIds.length);
+            assertEq(claimed, token.balanceOf(userC_cw)/2);
             assertEq(lastClaimedTimestamp, block.timestamp);
         }
 
         // check streaming contract: storage variables
         assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));
+    }
+
+    // tokenIds: [userC_cw, userC_cw, userB_cw]
+    // different cold wallets delegating to the same hot wallet
+    function testUserCHotWalletCanClaimForDifferentColdWallets_OrderedArray_T05() public {
+
+        //------------ arrays        
+        uint256[] memory tokenIds = new uint256[](3);
+            tokenIds[0] = 2;
+            tokenIds[1] = 3;
+            tokenIds[2] = 1;
+
+        address[] memory owners = new address[](3);
+            owners[0] = userC_cw;
+            owners[1] = userC_cw;
+            owners[2] = userB_cw;
+
+        uint256[] memory amounts = new uint256[](3);
+            amounts[0] = 2 * streaming.emissionPerSecond();
+            amounts[1] = amounts[0];
+            amounts[2] = amounts[0];
+
+        // ---------------------------------------------------
+
+        // claimable: 2 eps per NFT; 3 NFTs
+        uint256 epsClaimable = 6 * streaming.emissionPerSecond();  
+
+        //before balances
+        UserBalances memory usersBefore;
+            usersBefore.userB = token.balanceOf(userB);    
+            usersBefore.userB_cw = token.balanceOf(userB_cw);
+            usersBefore.userC = token.balanceOf(userC);
+            usersBefore.userC_cw = token.balanceOf(userC_cw);
+
+        // check events
+        vm.expectEmit(true, true, true, true);
+        emit ClaimedByDelegate(userC, owners, tokenIds, amounts);
+
+        vm.prank(userC);
+        streaming.claimDelegated(tokenIds);
+
+        // .... after balances
+        UserBalances memory usersAfter;
+            usersAfter.userB = token.balanceOf(userB);    
+            usersAfter.userB_cw = token.balanceOf(userB_cw);
+            usersAfter.userC = token.balanceOf(userC);
+            usersAfter.userC_cw = token.balanceOf(userC_cw);
+
+        // check tokens transfers
+        assertEq(token.balanceOf(address(streaming)), totalAllocation - totalClaimed - epsClaimable);
+        //userB
+        assertEq(usersBefore.userB, usersAfter.userB);
+        assertEq(usersBefore.userB_cw + (2 * streaming.emissionPerSecond()), usersAfter.userB_cw);
+        //userC
+        assertEq(usersBefore.userC, usersAfter.userC);
+        assertEq(usersBefore.userC_cw + (4 * streaming.emissionPerSecond()), usersAfter.userC_cw);
+
+        // check streaming contract: tokenIds
+        for (uint256 i = 0; i < tokenIds.length; ++i) {
+
+            (uint128 claimed, uint128 lastClaimedTimestamp, ) = streaming.streams(tokenIds[i]);
+
+            assertEq(claimed, token.balanceOf(userC_cw)/2);
+            assertEq(lastClaimedTimestamp, block.timestamp);
+        }
+
+        // check streaming contract: storage variables
+        assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));   
+    }
+
+    // tokenIds: [userC_cw, userB_cw, userC_cw]
+    // different cold wallets delegating to the same hot wallet
+    function testUserCHotWalletCanClaimForDifferentColdWallets_UnorderedArray_T05() public {
+
+        //------------ arrays        
+        uint256[] memory tokenIds = new uint256[](3);
+            tokenIds[0] = 2;
+            tokenIds[1] = 1;
+            tokenIds[2] = 3;
+
+        address[] memory owners = new address[](3);
+            owners[0] = userC_cw;
+            owners[1] = userB_cw;
+            owners[2] = userC_cw;
+
+        uint256[] memory amounts = new uint256[](3);
+            amounts[0] = 2 * streaming.emissionPerSecond();
+            amounts[1] = amounts[0];
+            amounts[2] = amounts[0];
+
+        // ---------------------------------------------------
+
+        // claimable: 2 eps per NFT; 3 NFTs
+        uint256 epsClaimable = 6 * streaming.emissionPerSecond();  
+
+        //before balances
+        UserBalances memory usersBefore;
+            usersBefore.userB = token.balanceOf(userB);    
+            usersBefore.userB_cw = token.balanceOf(userB_cw);
+            usersBefore.userC = token.balanceOf(userC);
+            usersBefore.userC_cw = token.balanceOf(userC_cw);
+
+        // check events
+        vm.expectEmit(true, true, true, true);
+        emit ClaimedByDelegate(userC, owners, tokenIds, amounts);
+
+        vm.prank(userC);
+        streaming.claimDelegated(tokenIds);
+
+        // .... after balances
+        UserBalances memory usersAfter;
+            usersAfter.userB = token.balanceOf(userB);    
+            usersAfter.userB_cw = token.balanceOf(userB_cw);
+            usersAfter.userC = token.balanceOf(userC);
+            usersAfter.userC_cw = token.balanceOf(userC_cw);
+
+        // check tokens transfers
+        assertEq(token.balanceOf(address(streaming)), totalAllocation - totalClaimed - epsClaimable);
+        //userB
+        assertEq(usersBefore.userB, usersAfter.userB);
+        assertEq(usersBefore.userB_cw + (2 * streaming.emissionPerSecond()), usersAfter.userB_cw);
+        //userC
+        assertEq(usersBefore.userC, usersAfter.userC);
+        assertEq(usersBefore.userC_cw + (4 * streaming.emissionPerSecond()), usersAfter.userC_cw);
+
+        // check streaming contract: tokenIds
+        for (uint256 i = 0; i < tokenIds.length; ++i) {
+
+            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(tokenIds[i]);
+
+            assertEq(claimed, token.balanceOf(userC_cw)/2);
+            assertEq(lastClaimedTimestamp, block.timestamp);
+        }
+
+        // check streaming contract: storage variables
+        assertEq(streaming.totalClaimed(), (totalClaimed + epsClaimable));   
     }
 }
 
@@ -809,11 +1095,11 @@ contract StateStreamEndedTest is StateStreamEnded {
         assertEq(userCCwTokenBalance_before + epsClaimable, userCCwTokenBalance_after);
 
         // check streaming contract: tokenIds
-        for (uint256 i = tokenIds[0]; i < tokenIds.length; ++i) {
+        for (uint256 i = 0; i < tokenIds.length; ++i) {
 
-            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
+            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(tokenIds[i]);
 
-            assertEq(claimed, epsClaimable/tokenIds.length);
+            assertEq(claimed, token.balanceOf(userC_cw)/2);
             assertEq(lastClaimedTimestamp, block.timestamp);
         }
 
@@ -919,11 +1205,11 @@ contract StateStreamEndedPlusTwoDaysTest is StateStreamEndedPlusTwoDays {
         assertEq(userCCwTokenBalance_before + epsClaimable, userCCwTokenBalance_after);
 
         // check streaming contract: tokenIds
-        for (uint256 i = tokenIds[0]; i < tokenIds.length; ++i) {
+        for (uint256 i = 0; i < tokenIds.length; ++i) {
 
-            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
+            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(tokenIds[i]);
 
-            assertEq(claimed, epsClaimable/tokenIds.length);
+            assertEq(claimed, token.balanceOf(userC_cw)/2);
             assertEq(lastClaimedTimestamp, streaming.endTime());
         }
 
@@ -1032,11 +1318,11 @@ contract StateBeforeDeadlineTest is StateBeforeDeadline {
         assertEq(userCCwTokenBalance_before + epsClaimable, userCCwTokenBalance_after);
 
         // check streaming contract: tokenIds
-        for (uint256 i = tokenIds[0]; i < tokenIds.length; ++i) {
+        for (uint256 i = 0; i < tokenIds.length; ++i) {
 
-            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(i);
+            (uint128 claimed, uint128 lastClaimedTimestamp, bool isPaused) = streaming.streams(tokenIds[i]);
 
-            assertEq(claimed, epsClaimable/tokenIds.length);
+            assertEq(claimed, token.balanceOf(userC_cw)/2);
             assertEq(lastClaimedTimestamp, streaming.endTime());
         }
 
