@@ -88,6 +88,84 @@ abstract contract StateDeploy is Test {
 //Note: t = 0
 contract StateDeployTest is StateDeploy {
 
+    function testInvalidStartTime() public {
+
+        // stream params
+        startTime = block.timestamp;
+        endTime = 12;
+        allocationPerNft = 10 ether;
+        totalAllocation = 10 ether * 4;
+
+        // contracts
+        vm.startPrank(owner);
+
+        token = new ERC20Mock();       
+        nft = new MockNFT();
+
+        vm.expectRevert(abi.encodeWithSelector(InvalidStartime.selector));
+
+        streaming = new NftStreaming(address(nft), address(token), owner, depositor, operator, address(0), 
+                                    uint128(allocationPerNft), startTime, endTime);
+
+    }
+
+    function testInvalidEndtime() public {
+        // stream params
+        startTime = 2;
+        endTime = 1;
+        allocationPerNft = 10 ether;
+        totalAllocation = 10 ether * 4;
+
+        // contracts
+        vm.startPrank(owner);
+
+        token = new ERC20Mock();       
+        nft = new MockNFT();
+
+        vm.expectRevert(abi.encodeWithSelector(InvalidEndTime.selector));
+
+        streaming = new NftStreaming(address(nft), address(token), owner, depositor, operator, address(0), 
+                                    uint128(allocationPerNft), startTime, endTime);
+    }
+
+    function testInvalidAllocation() public {
+        // stream params
+        startTime = 2;
+        endTime = 12;
+        allocationPerNft = 0 ether;
+        totalAllocation = 10 ether * 4;
+
+        // contracts
+        vm.startPrank(owner);
+
+        token = new ERC20Mock();       
+        nft = new MockNFT();
+
+        vm.expectRevert(abi.encodeWithSelector(InvalidAllocation.selector));
+
+        streaming = new NftStreaming(address(nft), address(token), owner, depositor, operator, address(0), 
+                                    uint128(allocationPerNft), startTime, endTime);
+    }
+
+    function testInvalidEmission() public {
+        // stream params
+        startTime = 1;
+        endTime = 12000 ether;
+        allocationPerNft = 10 ether;
+        totalAllocation = 10 ether * 4;
+
+        // contracts
+        vm.startPrank(owner);
+
+        token = new ERC20Mock();       
+        nft = new MockNFT();
+
+        vm.expectRevert(abi.encodeWithSelector(InvalidEmission.selector));
+
+        streaming = new NftStreaming(address(nft), address(token), owner, depositor, operator, address(0), 
+                                    uint128(allocationPerNft), startTime, endTime);
+    }
+
     function testConstructorParameters() public {
         // Check NFT address
         assertEq(address(streaming.NFT()), address(nft));
@@ -271,6 +349,7 @@ abstract contract StateT03 is StateStreamingStarted {
 }
 
 contract StateT03Test is StateT03 {
+    using stdStorage for StdStorage;
 
     function testWrongUserCannotClaimSingle() public {
 
@@ -289,6 +368,22 @@ contract StateT03Test is StateT03 {
 
         vm.prank(userB);
         streaming.claim(tokenIds);     
+    }
+
+    function testCannotClaimInExcessOfAllocation() public {
+        
+        // modify streams(0).claim
+        stdstore
+            .target(address(streaming))
+            .sig("streams(uint256)")
+            .with_key(uint256(0))
+            .depth(0)
+            .checked_write(uint256(100 ether)); 
+
+        vm.expectRevert(abi.encodeWithSelector(IncorrectClaimable.selector));
+
+        vm.prank(userA);
+        streaming.claimSingle(0);   
     }
 
     //can call claim; 1 second of emissions claimable
@@ -317,6 +412,16 @@ contract StateT03Test is StateT03 {
 
         // check streaming contract: storage variables
         assertEq(streaming.totalClaimed(), epsClaimable);
+    }
+
+    function testCannotClaimMultiple_EmptyArray_T03() public {
+
+        uint256[] memory tokenIds;
+
+        vm.expectRevert(abi.encodeWithSelector(EmptyArray.selector));
+
+        vm.prank(userC);
+        streaming.claim(tokenIds);     
     }
 
     function testUserCCanClaimMultiple_T03() public {

@@ -215,6 +215,15 @@ contract StateT03Test is StateT03 {
         streaming.pauseStreams(tokenIds);
     }
 
+    function testCannotPauseWithEmptyArray() public {
+        uint256[] memory tokenIds;
+
+        vm.expectRevert(abi.encodeWithSelector(EmptyArray.selector));
+
+        vm.prank(operator);
+        streaming.pauseStreams(tokenIds);
+    }
+
     function testOperatorCanPauseStream() public {
         uint256[] memory tokenIds = new uint256[](3);
             tokenIds[0] = 1;    //userB
@@ -346,6 +355,7 @@ contract StateT05Test is StateT05 {
         streaming.claim(userCTokenIds);      
     }
 
+
     function testOperatorCannotUnpauseStream() public {
         uint256[] memory tokenIds = new uint256[](3);
             tokenIds[0] = 1;    //userB
@@ -357,6 +367,15 @@ contract StateT05Test is StateT05 {
         vm.prank(operator);
         streaming.unpauseStreams(tokenIds);
 
+    }
+
+    function testCannotUnpauseWithEmptyArray() public {
+        uint256[] memory tokenIds;
+
+        vm.expectRevert(abi.encodeWithSelector(EmptyArray.selector));
+
+        vm.prank(owner);
+        streaming.unpauseStreams(tokenIds);
     }
 
     function testOwnerCanUnpauseStream() public {

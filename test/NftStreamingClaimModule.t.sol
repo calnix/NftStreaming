@@ -260,6 +260,16 @@ contract StateT03Test is StateT03 {
         streaming.claimViaModule(address(mockModule), tokenIds);
     }
 
+    function testUserACannotClaimUnregisteredModule() public {
+        uint256[] memory tokenIds = new uint256[](1);
+            tokenIds[0] = 0;
+
+        vm.expectRevert(abi.encodeWithSelector(UnregisteredModule.selector));
+
+        vm.prank(userA);
+        streaming.claimViaModule(address(1), tokenIds);
+    }
+
     //can call claim; 1 second of emissions claimable
     function testUserACanClaim_T03() public {
 

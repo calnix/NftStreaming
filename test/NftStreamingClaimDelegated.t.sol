@@ -404,7 +404,6 @@ contract StateT03Test is StateT03 {
 
     }
 
-
     function testEmptyArrayCannotClaimDelegated() public {
         uint256[] memory emptyTokenIds = new uint256[](0);
 
@@ -412,6 +411,23 @@ contract StateT03Test is StateT03 {
 
         vm.prank(userA);
         streaming.claimDelegated(emptyTokenIds);
+    }
+
+    function testCannotClaimDelegatedIfCallFails() public {
+
+        uint256[] memory tokenIds = new uint256[](1);
+            tokenIds[0] = 0;
+
+        vm.mockCallRevert(
+            address(streaming.DELEGATE_REGISTRY()),
+            abi.encodeWithSelector(IDelegateRegistry(streaming.DELEGATE_REGISTRY()).multicall.selector),
+            ""
+        );
+
+        vm.expectRevert(abi.encodeWithSelector(StaticCallFailed.selector));
+
+        vm.prank(userA);
+        streaming.claimDelegated(tokenIds);
     }
 
     //can call claim; 1 second of emissions claimable
